@@ -12,7 +12,7 @@
           <Coordinate point='0 -4 0 5 4 0 -5 4 0'/>
         </TriangleSet>
         <Appearance>
-          <Material emissiveColor='1 0 1'/>
+          <Material emissiveColor='1 1 1'/>
         </Appearance>
       </Shape>
     </Transform>
