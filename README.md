@@ -1,3 +1,5 @@
+# Pedro Camargo e Gustavo Tavares
+
 # Renderizador
 Renderizador base para o curso de Computação Gráfica
 
