@@ -421,34 +421,49 @@ class GL:
     @staticmethod
     def triangleStripSet(point, stripCount, colors):
         """Função usada para renderizar TriangleStripSet."""
-        # A função triangleStripSet é usada para desenhar tiras de triângulos interconectados,
-        # você receberá as coordenadas dos pontos no parâmetro point, esses pontos são uma
-        # lista de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x
-        # do primeiro ponto, point[1] o valor y do primeiro ponto, point[2] o valor z da
-        # coordenada z do primeiro ponto. Já point[3] é a coordenada x do segundo ponto e assim
-        # por diante. No TriangleStripSet a quantidade de vértices a serem usados é informado
-        # em uma lista chamada stripCount (perceba que é uma lista). Ligue os vértices na ordem,
-        # primeiro triângulo será com os vértices 0, 1 e 2, depois serão os vértices 1, 2 e 3,
-        # depois 2, 3 e 4, e assim por diante. Cuidado com a orientação dos vértices, ou seja,
-        # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
-        for x in range(0,stripCount[0]-2):
-            p0 = (point[x*3],point[x*3 + 1],point[x*3 + 2])
-            p1 = (point[x*3 + 3],point[x*3 + 4],point[x*3 + 5])
-            p2 = (point[x*3 + 6],point[x*3 + 7],point[x*3 + 8])
+        # A função triangleStripSet é usada para desenhar tiras de triângulos interconectados.
+        # O parâmetro 'point' contém uma lista de coordenadas x, y e z dos vértices.
+        # 'stripCount' especifica quantos vértices formam cada tira de triângulos.
+        
+        index = 0  # Índice que rastreia a posição atual na lista de pontos
 
-            v1 = np.array(p1) - np.array(p0)
-            v2 = np.array(p2) - np.array(p0)
-            
-            normal = np.cross(v1, v2)
-            normal = normal / np.linalg.norm(normal)
-            
-            d = np.dot(normal, GL.forward_direction)
-            if d > 0:
-                GL.triangleSet([p0[0],p0[1],p0[2],p1[0],p1[1],p1[2],p2[0],p2[1],p2[2]], colors)
-            else:
-                GL.triangleSet([p0[0],p0[1],p0[2],p2[0],p2[1],p2[2],p1[0],p1[1],p1[2]], colors)
+        for count in stripCount:
+            # Para cada faixa de triângulos, percorremos os pontos
+            for x in range(count - 2):  # Garantimos que existem pelo menos 3 vértices por faixa
+                # Pegando três vértices consecutivos
+                p0 = (point[index*3], point[index*3 + 1], point[index*3 + 2])
+                p1 = (point[(index + 1)*3], point[(index + 1)*3 + 1], point[(index + 1)*3 + 2])
+                p2 = (point[(index + 2)*3], point[(index + 2)*3 + 1], point[(index + 2)*3 + 2])
 
+                orientation = GL.orientation(p0,p1,p2)
+
+                if orientation > 0:
+                    # Se a orientação estiver correta, desenha o triângulo
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                else:
+                    # Se a orientação estiver invertida, troca a ordem dos vértices
+                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+
+                # Avança para o próximo ponto
+                index += 1
             
+            # Após processar uma faixa de triângulos, avança o índice para o próximo conjunto de vértices
+            index += 2  
+
+    def orientation(p0,p1,p2):
+        v1 = np.array(p1) - np.array(p0)
+        v2 = np.array(p2) - np.array(p0)
+        
+        normal = np.cross(v1, v2)
+        norm_value = np.linalg.norm(normal)
+    
+        if norm_value != 0 and not np.isnan(norm_value):
+            normal = normal / norm_value
+        else:
+            normal = np.array([0, 0, 0])
+
+        d = np.dot(normal, GL.forward_direction)
+        return d
             
                 
     @staticmethod
@@ -466,21 +481,43 @@ class GL:
         # depois 2, 3 e 4, e assim por diante. Cuidado com a orientação dos vértices, ou seja,
         # todos no sentido horário ou todos no sentido anti-horário, conforme especificado.
 
-        for x in range(0,len(index)-3):
-            p0 = (point[index[x]*3],point[index[x]*3 + 1],point[index[x]*3 + 2])
-            p1 = (point[index[x+1]*3],point[index[x+1]*3 + 1],point[index[x+1]*3 + 2])
-            p2 = (point[index[x+2]*3],point[index[x+2]*3 + 1],point[index[x+2]*3 + 2])
+        current_strip = []  # Lista temporária para armazenar a sequência atual de vértices
 
-            v1 = np.array(p1) - np.array(p0)
-            v2 = np.array(p2) - np.array(p0)
-        
-            normal = np.cross(v1, v2)
-            
-            d = np.dot(normal, GL.forward_direction)
-            if d > 0:
-                GL.triangleSet([p0[0],p0[1],p0[2],p1[0],p1[1],p1[2],p2[0],p2[1],p2[2]], colors)
+        for i in index:
+            if i == -1:
+                # Quando encontramos -1, processamos a tira atual se ela tiver pelo menos 3 vértices
+                if len(current_strip) >= 3:
+                    for x in range(len(current_strip) - 2):
+                        p0 = current_strip[x]
+                        p1 = current_strip[x + 1]
+                        p2 = current_strip[x + 2]
+
+                        # Verificar a orientação do triângulo (sentido horário/anti-horário)
+                        orientation = GL.orientation(p0, p1, p2)
+                        if orientation > 0:
+                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                        else:
+                            GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+
+                # Limpar a lista atual para a próxima tira
+                current_strip = []
             else:
-                GL.triangleSet([p0[0],p0[1],p0[2],p2[0],p2[1],p2[2],p1[0],p1[1],p1[2]], colors)
+                # Adiciona o vértice correspondente ao índice atual na tira corrente
+                current_strip.append((point[i*3], point[i*3 + 1], point[i*3 + 2]))
+
+        # Caso o último grupo de vértices não seja seguido por um -1
+        if len(current_strip) >= 3:
+            for x in range(len(current_strip) - 2):
+                p0 = current_strip[x]
+                p1 = current_strip[x + 1]
+                p2 = current_strip[x + 2]
+
+                # Verificar a orientação do triângulo (sentido horário/anti-horário)
+                orientation = GL.orientation(p0, p1, p2)
+                if orientation > 0:
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                else:
+                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
 
 
     @staticmethod
@@ -523,21 +560,43 @@ class GL:
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
         
-        for x in range(0, len(coordIndex) - 3):
-            p0 = (coord[coordIndex[x]*3],coord[coordIndex[x]*3 + 1],coord[coordIndex[x]*3 + 2])
-            p1 = (coord[coordIndex[x+1]*3],coord[coordIndex[x+1]*3 + 1],coord[coordIndex[x+1]*3 + 2])
-            p2 = (coord[coordIndex[x+2]*3],coord[coordIndex[x+2]*3 + 1],coord[coordIndex[x+2]*3 + 2])
+        current_face = [] 
+        for index in coordIndex:
+            if index == -1:
+                if len(current_face) >= 3:
+                    for x in range(1, len(current_face) - 1):
+                        p0 = current_face[0]
+                        p1 = current_face[x]
+                        p2 = current_face[x + 1]
 
-            v1 = np.array(p1) - np.array(p0)
-            v2 = np.array(p2) - np.array(p0)
-        
-            normal = np.cross(v1, v2)
-            normal = normal / np.linalg.norm(normal)
-            d = np.dot(normal, GL.forward_direction)
-            if d > 0:
-                GL.triangleSet([p0[0],p0[1],p0[2],p1[0],p1[1],p1[2],p2[0],p2[1],p2[2]], colors)
+                        orientation = GL.orientation(p0,p1,p2)
+                        if orientation > 0:
+                            # Se a orientação estiver correta, desenha o triângulo
+                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                        else:
+                            # Se a orientação estiver invertida, troca a ordem dos vértices
+                            GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+
+                # Limpa a face atual para começar a próxima
+                current_face = []
             else:
-                GL.triangleSet([p0[0],p0[1],p0[2],p2[0],p2[1],p2[2],p1[0],p1[1],p1[2]], colors)
+                # Adiciona o vértice correspondente ao índice atual na face corrente
+                current_face.append((coord[index*3], coord[index*3 + 1], coord[index*3 + 2]))
+
+        # Caso o último grupo de vértices não seja seguido por um -1
+        if len(current_face) >= 3:
+            for x in range(1, len(current_face) - 1):
+                p0 = current_face[0]
+                p1 = current_face[x]
+                p2 = current_face[x + 1]
+
+                orientation = GL.orientation(p0,p1,p2)
+                if orientation > 0:
+                    # Se a orientação estiver correta, desenha o triângulo
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                else:
+                    # Se a orientação estiver invertida, troca a ordem dos vértices
+                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
 
         
 
