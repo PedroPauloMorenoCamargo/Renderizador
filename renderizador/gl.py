@@ -225,7 +225,7 @@ class GL:
 
 
     @staticmethod
-    def triangleSet(point, colors):
+    def triangleSet(point, colors, colorPerVertex=False, color=None):
         """Função usada para renderizar TriangleSet."""
         # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
         # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
@@ -559,7 +559,12 @@ class GL:
         # textura para o poligono, para isso, use as coordenadas de textura e depois aplique a
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
-        
+        print("IndexedFaceSet : ")
+        if coord:
+            print("\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex))
+        print("colorPerVertex = {0}".format(colorPerVertex))
+        if colorPerVertex and color and colorIndex:
+            print("\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex))
         current_face = [] 
         for index in coordIndex:
             if index == -1:
@@ -572,10 +577,10 @@ class GL:
                         orientation = GL.orientation(p0,p1,p2)
                         if orientation > 0:
                             # Se a orientação estiver correta, desenha o triângulo
-                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
                         else:
                             # Se a orientação estiver invertida, troca a ordem dos vértices
-                            GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
 
                 # Limpa a face atual para começar a próxima
                 current_face = []
@@ -593,10 +598,10 @@ class GL:
                 orientation = GL.orientation(p0,p1,p2)
                 if orientation > 0:
                     # Se a orientação estiver correta, desenha o triângulo
-                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
                 else:
                     # Se a orientação estiver invertida, troca a ordem dos vértices
-                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
 
         
 
