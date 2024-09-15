@@ -38,7 +38,6 @@ class GL:
     @staticmethod
     def polypoint2D(point, colors):
         """Função usada para renderizar Polypoint2D."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Polypoint2D
         # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
         # de pontos x, y sempre na ordem. Assim point[0] é o valor da coordenada x do
         # primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é a
@@ -63,7 +62,6 @@ class GL:
     @staticmethod
     def polyline2D(lineSegments, colors):
         """Função usada para renderizar Polyline2D."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#Polyline2D
         # Nessa função você receberá os pontos de uma linha no parâmetro lineSegments, esses
         # pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o valor da
         # coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto. Já point[2] é
@@ -163,31 +161,16 @@ class GL:
             draw_circle_points(0, 0, x, y, rgb)
 
     @staticmethod
-    def triangleSet2D(vertices, colors):
-        """Função usada para renderizar TriangleSet2D."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry2D.html#TriangleSet2D
-        # Nessa função você receberá os vertices de um triângulo no parâmetro vertices,
-        # esses pontos são uma lista de pontos x, y sempre na ordem. Assim point[0] é o
-        # valor da coordenada x do primeiro ponto, point[1] o valor y do primeiro ponto.
-        # Já point[2] é a coordenada x do segundo ponto e assim por diante. Assuma que a
-        # quantidade de pontos é sempre multiplo de 3, ou seja, 6 valores ou 12 valores, etc.
-        # O parâmetro colors é um dicionário com os tipos cores possíveis, para o TriangleSet2D
-        # você pode assumir inicialmente o desenho das linhas com a cor emissiva (emissiveColor).
-        # Pega a cor emissiva do dicionario
+    def triangleSet2D(vertices, colors, color_vertices=None, color_per_vertex=False, Z=None):
+        # Cor emissiva ou difusa (default)
         emissiveColor = colors.get('emissiveColor')
         diffuseColor = colors.get('diffuseColor')
-        if emissiveColor == [0,0,0]:
-            r = int(diffuseColor[0] * 255)
-            g = int(diffuseColor[1] * 255)
-            b = int(diffuseColor[2] * 255)
+        
+        if emissiveColor == [0, 0, 0]:
+            default_rgb = [int(diffuseColor[0] * 255), int(diffuseColor[1] * 255), int(diffuseColor[2] * 255)]
         else:
-            r = int(emissiveColor[0] * 255)
-            g = int(emissiveColor[1] * 255)
-            b = int(emissiveColor[2] * 255)
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        #Associa a cor emissiva para valores RGB
-        rgb = [r,g,b]
-
+            default_rgb = [int(emissiveColor[0] * 255), int(emissiveColor[1] * 255), int(emissiveColor[2] * 255)]
+        
         def sign(x, y, p0, p1):
             x0, y0 = p0
             x1, y1 = p1
@@ -197,40 +180,94 @@ class GL:
             L0 = sign(x, y, p0, p1)
             L1 = sign(x, y, p1, p2)
             L2 = sign(x, y, p2, p0)
-            return (L0 >= 0 and  L1>=0 and L2 >=0)
+            return (L0 >= 0 and L1 >= 0 and L2 >= 0)
+        
+        def barycentric_coords(p, p0, p1, p2):
+            x, y = p
+            xA, yA = p0
+            xB, yB = p1
+            xC, yC = p2
+            
+            # Calcular alpha
+            numer_alpha = -(x - xB) * (yC - yB) + (y - yB) * (xC - xB)
+            denom_alpha = -(xA - xB) * (yC - yB) + (yA - yB) * (xC - xB)
+            alpha = numer_alpha / denom_alpha
+            
+            # Calcular beta
+            numer_beta = -(x - xC) * (yA - yC) + (y - yC) * (xA - xC)
+            denom_beta = -(xB - xC) * (yA - yC) + (yB - yC) * (xA - xC)
+            beta = numer_beta / denom_beta
+            
+            # Calcular gamma
+            gamma = 1.0 - alpha - beta
 
-    
-        def desenha_triangulo(p0, p1, p2, rgb):
-            #Create bounding box for the triangle points and screen bounds
+            return alpha, beta, gamma
+
+        
+        def interpolated_color(p, p0, p1, p2, c0, c1, c2, Z):
+            # Calcular as coordenadas baricêntricas
+            alpha, beta, gamma = barycentric_coords(p, p0, p1, p2)
+            
+            # Calcular o valor de Z ponderado usando as coordenadas baricêntricas
+            Z_interpolated = 1 / (alpha / Z[0] + beta / Z[1] + gamma / Z[2])
+            
+            # Interpolar as cores ajustadas pela profundidade Z
+            r = (alpha * c0[0] / Z[0] + beta * c1[0] / Z[1] + gamma * c2[0] / Z[2]) * Z_interpolated
+            g = (alpha * c0[1] / Z[0] + beta * c1[1] / Z[1] + gamma * c2[1] / Z[2]) * Z_interpolated
+            b = (alpha * c0[2] / Z[0] + beta * c1[2] / Z[1] + gamma * c2[2] / Z[2]) * Z_interpolated
+
+            return [int(r * 255), int(g * 255), int(b * 255)]
+        
+        def desenha_triangulo(p0, p1, p2, c0, c1, c2):
+            # Definir bounding box para o triângulo
             xmin = int(np.floor(min(p0[0], p1[0], p2[0])))
             xmax = int(np.ceil(max(p0[0], p1[0], p2[0])))
             ymin = int(np.floor(min(p0[1], p1[1], p2[1])))
             ymax = int(np.ceil(max(p0[1], p1[1], p2[1])))
-            if xmin < 0:
-                xmin = 0
-            if ymin < 0:
-                ymin = 0
-            if xmax > GL.width:
-                xmax = GL.width
-            if ymax > GL.height:
-                ymax = GL.height
+
+            # Limites da tela
+            xmin = max(xmin, 0)
+            ymin = max(ymin, 0)
+            xmax = min(xmax, GL.width)
+            ymax = min(ymax, GL.height)
+
+            # Percorrer todos os pixels no bounding box
             for x in range(xmin, xmax):
                 for y in range(ymin, ymax):
-                    if inside_triangle(x+0.5, y+0.5, p0, p1, p2):
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, rgb)
-        # Loopa pela lista de pontos e desenha eles
-        for i in range(0, len(vertices),6):
-            p0 = (vertices[i],vertices[i + 1])
-            p1 = (vertices[i+2],vertices[i + 3])
-            p2 = (vertices[i+4],vertices[i + 5])
-            desenha_triangulo(p0,p1,p2,rgb)
+                    if inside_triangle(x + 0.5, y + 0.5, p0, p1, p2):
+                        if color_per_vertex:
+                            # Interpolar a cor do ponto atual usando as cores dos vértices
+                            interpolated_rgb = interpolated_color((x + 0.5, y + 0.5), p0, p1, p2, c0, c1, c2, Z)
+                        else:
+                            # Usar a cor padrão se `color_per_vertex` for False
+                            interpolated_rgb = default_rgb
+                        # Desenhar o pixel com a cor interpolada
+                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, interpolated_rgb)
+
+        # Loopa pela lista de vértices e desenha os triângulos
+        for i in range(0, len(vertices), 6):
+            p0 = (vertices[i], vertices[i + 1])
+            p1 = (vertices[i + 2], vertices[i + 3])
+            p2 = (vertices[i + 4], vertices[i + 5])
+
+            if color_per_vertex:
+                # Usar as cores fornecidas para cada vértice
+                c0 = color_vertices[0]
+                c1 = color_vertices[1]
+                c2 = color_vertices[2]
+            else:
+                # Usar a cor padrão se `color_vertices` for False
+                c0 = c1 = c2 = default_rgb
+            
+            desenha_triangulo(p0, p1, p2, c0, c1, c2)
+
+
 
 
 
     @staticmethod
-    def triangleSet(point, colors, colorPerVertex=False, color=None):
+    def triangleSet(point, colors,color_vertices= None,color_per_vertex = False):
         """Função usada para renderizar TriangleSet."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#TriangleSet
         # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
         # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
         # primeiro ponto, point[1] o valor y do primeiro ponto, point[2] o valor z da
@@ -263,6 +300,7 @@ class GL:
             # Aplica a matriz de visão nos vértices
             vertices_look_at = np.matmul(GL.view_matrix, vertices)
 
+            Z = [vertices_look_at[3][0],vertices_look_at[3][1],vertices_look_at[3][2]]
             # Aplica a matriz de projeção nos vértices
             vertices_NDC = np.matmul(GL.P, vertices_look_at)
 
@@ -291,7 +329,7 @@ class GL:
             pontos = np.array([vertices_finais[0][0], vertices_finais[1][0],
                         vertices_finais[0][1], vertices_finais[1][1],
                         vertices_finais[0][2], vertices_finais[1][2]])
-            GL.triangleSet2D(pontos, colors)
+            GL.triangleSet2D(pontos, colors, color_vertices, color_per_vertex,Z)
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -404,8 +442,6 @@ class GL:
 
         # Combinação das transformações: escala, rotação e translação
         transformacao_total = np.matmul(translacao, np.matmul(rotacao, escala))
-        
-        print(transformacao_total)
         # Adiciona a matriz de transformação na pilha
         GL.transform.append(transformacao_total)
 
@@ -433,8 +469,8 @@ class GL:
 
         for count in stripCount:
             # Para cada faixa de triângulos, percorremos os pontos
-            for x in range(count - 2):  # Garantimos que existem pelo menos 3 vértices por faixa
-                # Pegando três vértices consecutivos
+            for x in range(count - 2): 
+                # Pegando vertices do triangulo
                 p0 = (point[index*3], point[index*3 + 1], point[index*3 + 2])
                 p1 = (point[(index + 1)*3], point[(index + 1)*3 + 1], point[(index + 1)*3 + 2])
                 p2 = (point[(index + 2)*3], point[(index + 2)*3 + 1], point[(index + 2)*3 + 2])
@@ -473,7 +509,6 @@ class GL:
     @staticmethod
     def indexedTriangleStripSet(point, index, colors):
         """Função usada para renderizar IndexedTriangleStripSet."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/rendering.html#IndexedTriangleStripSet
         # A função indexedTriangleStripSet é usada para desenhar tiras de triângulos
         # interconectados, você receberá as coordenadas dos pontos no parâmetro point, esses
         # pontos são uma lista de pontos x, y, e z sempre na ordem. Assim point[0] é o valor
@@ -493,6 +528,7 @@ class GL:
                 # Quando encontramos -1, processamos a tira atual se ela tiver pelo menos 3 vértices
                 if len(current_strip) >= 3:
                     for x in range(len(current_strip) - 2):
+                        #Pega os pontos
                         p0 = current_strip[x]
                         p1 = current_strip[x + 1]
                         p2 = current_strip[x + 2]
@@ -507,29 +543,31 @@ class GL:
                 # Limpar a lista atual para a próxima tira
                 current_strip = []
             else:
-                # Adiciona o vértice correspondente ao índice atual na tira corrente
+                # Adiciona o vértice correspondente ao índice atual na tira atual
                 current_strip.append((point[i*3], point[i*3 + 1], point[i*3 + 2]))
 
-        # Caso o último grupo de vértices não seja seguido por um -1
-        if len(current_strip) >= 3:
-            for x in range(len(current_strip) - 2):
-                p0 = current_strip[x]
-                p1 = current_strip[x + 1]
-                p2 = current_strip[x + 2]
 
-                # Verificar a orientação do triângulo (sentido horário/anti-horário)
-                orientation = GL.orientation(p0, p1, p2)
-                if orientation > 0:
-                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
-                else:
-                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+    @staticmethod
+    def box(size, colors):
+        """Função usada para renderizar Boxes."""
+        # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
+        # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
+        # locais. O argumento size especifica as extensões da caixa ao longo dos eixos X, Y
+        # e Z, respectivamente, e cada valor do tamanho deve ser maior que zero. Para desenha
+        # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
+        # encontre os vértices e defina os triângulos.
 
+        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
+        print("Box : size = {0}".format(size)) # imprime no terminal pontos
+        print("Box : colors = {0}".format(colors)) # imprime no terminal as cores
+
+        # Exemplo de desenho de um pixel branco na coordenada 10, 10
+        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
 
     @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
                        texCoord, texCoordIndex, colors, current_texture):
         """Função usada para renderizar IndexedFaceSet."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#IndexedFaceSet
         # A função indexedFaceSet é usada para desenhar malhas de triângulos. Ela funciona de
         # forma muito simular a IndexedTriangleStripSet porém com mais recursos.
         # Você receberá as coordenadas dos pontos no parâmetro cord, esses
@@ -548,74 +586,60 @@ class GL:
         # textura para o poligono, para isso, use as coordenadas de textura e depois aplique a
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
-        print("IndexedFaceSet : ")
-        if coord:
-            print("\tpontos(x, y, z) = {0}, coordIndex = {1}".format(coord, coordIndex))
-        print("colorPerVertex = {0}".format(colorPerVertex))
-        if colorPerVertex and color and colorIndex:
-            print("\tcores(r, g, b) = {0}, colorIndex = {1}".format(color, colorIndex))
+        
+        #Cria as condições iniciais para o código não crashar
         current_face = [] 
+        current_color_indices = []
+        if not colorPerVertex:
+            color = [1, 1, 1]
+        if colorPerVertex:
+            if not color or not colorIndex:
+                colorPerVertex = False
+                color = [1, 1, 1]
+
+        #Loopa pelos Indexes
         for index in coordIndex:
+            #Caso ache -1 constroi a face atual
             if index == -1:
                 if len(current_face) >= 3:
+                    #Loopa pelos triangulos da face atual
                     for x in range(1, len(current_face) - 1):
-                        p0 = current_face[0]
-                        p1 = current_face[x]
-                        p2 = current_face[x + 1]
+                        #Pega os pontos da face atual e os indexes das cores
+                        p0, c0 = current_face[0], current_color_indices[0]
+                        p1, c1 = current_face[x], current_color_indices[x]
+                        p2, c2 = current_face[x + 1], current_color_indices[x + 1]
 
+                        #Pega o valor da cor de cada vértice
+                        color0 = [color[c0 * 3], color[c0 * 3 + 1], color[c0 * 3 + 2]]
+                        color1 = [color[c1 * 3], color[c1 * 3 + 1], color[c1 * 3 + 2]]
+                        color2 = [color[c2 * 3], color[c2 * 3 + 1], color[c2 * 3 + 2]]
+
+                        #Checa orientação dos vertices para que o triangulo seja desenhado corretamente
                         orientation = GL.orientation(p0,p1,p2)
+
+                        #Desenha o triangulo
                         if orientation > 0:
-                            # Se a orientação estiver correta, desenha o triângulo
-                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
+                            color_vertices = [color0, color1, color2]
+                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,color_vertices,colorPerVertex)
                         else:
-                            # Se a orientação estiver invertida, troca a ordem dos vértices
-                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
+                            color_vertices = [color0, color2, color1]
+                            GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors,color_vertices,colorPerVertex)
 
                 # Limpa a face atual para começar a próxima
                 current_face = []
+                #Limpa os indexes das cores
+                current_color_indices = []
             else:
-                # Adiciona o vértice correspondente ao índice atual na face corrente
+                #Adiciona as coordenadas  dos vertices e os indexes das cores
                 current_face.append((coord[index*3], coord[index*3 + 1], coord[index*3 + 2]))
-
-        # Caso o último grupo de vértices não seja seguido por um -1
-        if len(current_face) >= 3:
-            for x in range(1, len(current_face) - 1):
-                p0 = current_face[0]
-                p1 = current_face[x]
-                p2 = current_face[x + 1]
-
-                orientation = GL.orientation(p0,p1,p2)
-                if orientation > 0:
-                    # Se a orientação estiver correta, desenha o triângulo
-                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
+                if colorPerVertex:
+                    current_color_indices.append(colorIndex[index])
                 else:
-                    # Se a orientação estiver invertida, troca a ordem dos vértices
-                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors,colorPerVertex,color)
-
-        
-
-    @staticmethod
-    def box(size, colors):
-        """Função usada para renderizar Boxes."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#Box
-        # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
-        # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
-        # locais. O argumento size especifica as extensões da caixa ao longo dos eixos X, Y
-        # e Z, respectivamente, e cada valor do tamanho deve ser maior que zero. Para desenha
-        # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
-        # encontre os vértices e defina os triângulos.
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Box : size = {0}".format(size)) # imprime no terminal pontos
-        print("Box : colors = {0}".format(colors)) # imprime no terminal as cores
-
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+                    current_color_indices.append(0)
 
     @staticmethod
     def sphere(radius, colors):
         """Função usada para renderizar Esferas."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#Sphere
         # A função sphere é usada para desenhar esferas na cena. O esfera é centrada no
         # (0, 0, 0) no sistema de coordenadas local. O argumento radius especifica o
         # raio da esfera que está sendo criada. Para desenha essa esfera você vai
@@ -629,7 +653,6 @@ class GL:
     @staticmethod
     def navigationInfo(headlight):
         """Características físicas do avatar do visualizador e do modelo de visualização."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/navigation.html#NavigationInfo
         # O campo do headlight especifica se um navegador deve acender um luz direcional que
         # sempre aponta na direção que o usuário está olhando. Definir este campo como TRUE
         # faz com que o visualizador forneça sempre uma luz do ponto de vista do usuário.
@@ -642,7 +665,6 @@ class GL:
     @staticmethod
     def directionalLight(ambientIntensity, color, intensity, direction):
         """Luz direcional ou paralela."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/lighting.html#DirectionalLight
         # Define uma fonte de luz direcional que ilumina ao longo de raios paralelos
         # em um determinado vetor tridimensional. Possui os campos básicos ambientIntensity,
         # cor, intensidade. O campo de direção especifica o vetor de direção da iluminação
@@ -658,7 +680,6 @@ class GL:
     @staticmethod
     def pointLight(ambientIntensity, color, intensity, location):
         """Luz pontual."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/lighting.html#PointLight
         # Fonte de luz pontual em um local 3D no sistema de coordenadas local. Uma fonte
         # de luz pontual emite luz igualmente em todas as direções; ou seja, é omnidirecional.
         # Possui os campos básicos ambientIntensity, cor, intensidade. Um nó PointLight ilumina
@@ -674,7 +695,6 @@ class GL:
     @staticmethod
     def fog(visibilityRange, color):
         """Névoa."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/environmentalEffects.html#Fog
         # O nó Fog fornece uma maneira de simular efeitos atmosféricos combinando objetos
         # com a cor especificada pelo campo de cores com base nas distâncias dos
         # vários objetos ao visualizador. A visibilidadeRange especifica a distância no
@@ -690,7 +710,6 @@ class GL:
     @staticmethod
     def timeSensor(cycleInterval, loop):
         """Gera eventos conforme o tempo passa."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/time.html#TimeSensor
         # Os nós TimeSensor podem ser usados para muitas finalidades, incluindo:
         # Condução de simulações e animações contínuas; Controlar atividades periódicas;
         # iniciar eventos de ocorrência única, como um despertador;
@@ -714,7 +733,6 @@ class GL:
     @staticmethod
     def splinePositionInterpolator(set_fraction, key, keyValue, closed):
         """Interpola não linearmente entre uma lista de vetores 3D."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/interpolators.html#SplinePositionInterpolator
         # Interpola não linearmente entre uma lista de vetores 3D. O campo keyValue possui
         # uma lista com os valores a serem interpolados, key possui uma lista respectiva de chaves
         # dos valores em keyValue, a fração a ser interpolada vem de set_fraction que varia de
@@ -737,7 +755,6 @@ class GL:
     @staticmethod
     def orientationInterpolator(set_fraction, key, keyValue):
         """Interpola entre uma lista de valores de rotação especificos."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/interpolators.html#OrientationInterpolator
         # Interpola rotações são absolutas no espaço do objeto e, portanto, não são cumulativas.
         # Uma orientação representa a posição final de um objeto após a aplicação de uma rotação.
         # Um OrientationInterpolator interpola entre duas orientações calculando o caminho mais
