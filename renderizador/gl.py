@@ -526,25 +526,16 @@ class GL:
         for i in index:
             if i == -1:
                 # Quando encontramos -1, processamos a tira atual se ela tiver pelo menos 3 vértices
-                if len(current_strip) >= 3:
-                    for x in range(len(current_strip) - 2):
-                        #Pega os pontos
-                        p0 = current_strip[x]
-                        p1 = current_strip[x + 1]
-                        p2 = current_strip[x + 2]
-
-                        # Verificar a orientação do triângulo (sentido horário/anti-horário)
-                        orientation = GL.orientation(p0, p1, p2)
-                        if orientation > 0:
-                            GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
-                        else:
-                            GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+                if len(current_strip)//3 >= 3:
+                    GL.triangleStripSet(current_strip, [len(current_strip)//3], colors)
 
                 # Limpar a lista atual para a próxima tira
                 current_strip = []
             else:
                 # Adiciona o vértice correspondente ao índice atual na tira atual
-                current_strip.append((point[i*3], point[i*3 + 1], point[i*3 + 2]))
+                current_strip.append(point[i*3])
+                current_strip.append(point[i*3 + 1])
+                current_strip.append(point[i*3 + 2])
 
 
     @staticmethod
