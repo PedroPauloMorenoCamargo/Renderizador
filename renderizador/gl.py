@@ -300,7 +300,7 @@ class GL:
             # Aplica a matriz de visão nos vértices
             vertices_look_at = np.matmul(GL.view_matrix, vertices)
 
-            Z = [vertices_look_at[3][0],vertices_look_at[3][1],vertices_look_at[3][2]]
+            Z = [vertices_look_at[2][0],vertices_look_at[2][1],vertices_look_at[2][2]]
             # Aplica a matriz de projeção nos vértices
             vertices_NDC = np.matmul(GL.P, vertices_look_at)
 
