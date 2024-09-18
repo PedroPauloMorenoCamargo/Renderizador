@@ -52,17 +52,9 @@ class Renderizador:
             self.width,
             self.height
         )
-        gpu.GPU.framebuffer_storage(
-            self.framebuffers["FRONT"],
-            gpu.GPU.DEPTH_ATTACHMENT,
-            gpu.GPU.DEPTH_COMPONENT32F,
-            self.width,
-            self.height
-        )
 
         #   Cria framebuffer para supersampling
         self.framebuffers["SS"] = fbos[1]
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
         gpu.GPU.framebuffer_storage(
             self.framebuffers["SS"],
             gpu.GPU.COLOR_ATTACHMENT,
@@ -74,10 +66,9 @@ class Renderizador:
             self.framebuffers["SS"],
             gpu.GPU.DEPTH_ATTACHMENT,
             gpu.GPU.DEPTH_COMPONENT32F,
-            self.width * self.ss_factor,
-            self.height * self.ss_factor
+            self.width* self.ss_factor,
+            self.height* self.ss_factor
         )
-
         # Define cor que ira apagar o FrameBuffer quando clear_buffer() invocado
         gpu.GPU.clear_color([0, 0, 0])
 
@@ -90,7 +81,7 @@ class Renderizador:
     def pre(self):
         """Rotinas pré renderização."""
         # Função invocada antes do processo de renderização iniciar.
-
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
         # Limpa o frame buffers atual
         gpu.GPU.clear_buffer()
 
@@ -102,7 +93,6 @@ class Renderizador:
         """Post-rendering routine: downsample SS to FRONT and push FRONT to screen."""
         # Criar uma imagem final e um buffer de profundidade final
         final_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-        final_depth = np.full((self.height, self.width), np.inf)  
 
         # Binda o SS so pra garantir
         gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
@@ -112,8 +102,6 @@ class Renderizador:
             for x in range(self.width):
                 r, g, b = 0, 0, 0
                 count = 0
-                min_depth = np.inf  
-
                 # Itera os pixels a serem downsampled
                 for sy in range(self.ss_factor):
                     for sx in range(self.ss_factor):
@@ -121,13 +109,9 @@ class Renderizador:
                         ix = x * self.ss_factor + sx
                         iy = y * self.ss_factor + sy
 
-                        # Le a cor e a profundidade do pixel
+                        # Le a cor
                         pixel_color = gpu.GPU.read_pixel([ix, iy], gpu.GPU.RGB8)
-                        pixel_depth = gpu.GPU.read_pixel([ix, iy], gpu.GPU.DEPTH_COMPONENT32F)[0]
 
-                        # Checa se a profundidade é menor que a mínima
-                        if pixel_depth < min_depth:
-                            min_depth = pixel_depth
                         # Soma as cores
                         r += pixel_color[0]
                         g += pixel_color[1]
@@ -138,16 +122,16 @@ class Renderizador:
                 final_image[y, x, 0] = r // count
                 final_image[y, x, 1] = g // count
                 final_image[y, x, 2] = b // count
-                final_depth[y, x] = min_depth
 
         # Binda o framebuffer final
         gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
+        gpu.GPU.clear_buffer()
 
         # Itera sobre a imagem final e escreve no framebuffer final
         for y in range(self.height):
             for x in range(self.width):
                 gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, final_image[y, x].tolist())
-                gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [final_depth[y, x]])
+
 
     def mapping(self):
         """Mapeamento de funções para as rotinas de renderização."""
