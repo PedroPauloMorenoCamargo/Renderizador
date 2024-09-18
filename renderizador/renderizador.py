@@ -19,7 +19,7 @@ import gpu          # Simula os recursos de uma GPU
 
 import x3d          # Faz a leitura do arquivo X3D, gera o grafo de cena e faz traversal
 import scenegraph   # Imprime o grafo de cena no console
-
+import numpy as np  # Biblioteca de funções matemáticas
 LARGURA = 60  # Valor padrão para largura da tela
 ALTURA = 40   # Valor padrão para altura da tela
 
@@ -35,27 +35,16 @@ class Renderizador:
         self.image_file = "tela.png"
         self.scene = None
         self.framebuffers = {}
+        self.ss_factor = 2
+        
+        
 
     def setup(self):
         """Configura o sistema para a renderização."""
-        # Configurando color buffers para exibição na tela
-
-        # Cria uma (1) posição de FrameBuffer na GPU
-        fbo = gpu.GPU.gen_framebuffers(1)
-
-        # Define o atributo FRONT como o FrameBuffe principal
-        self.framebuffers["FRONT"] = fbo[0]
-
-        # Define que a posição criada será usada para desenho e leitura
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
-        # Opções:
-        # - DRAW_FRAMEBUFFER: Faz o bind só para escrever no framebuffer
-        # - READ_FRAMEBUFFER: Faz o bind só para leitura no framebuffer
-        # - FRAMEBUFFER: Faz o bind para leitura e escrita no framebuffer
-
-        # Aloca memória no FrameBuffer para um tipo e tamanho especificado de buffer
-
-        # Memória de Framebuffer para canal de cores
+        # Gera 2 framebuffers: um para a renderização final e outro para supersampling
+        fbos = gpu.GPU.gen_framebuffers(2)  
+        # Cria framebuffer tamanho original
+        self.framebuffers["FRONT"] = fbos[0]
         gpu.GPU.framebuffer_storage(
             self.framebuffers["FRONT"],
             gpu.GPU.COLOR_ATTACHMENT,
@@ -63,36 +52,40 @@ class Renderizador:
             self.width,
             self.height
         )
+        gpu.GPU.framebuffer_storage(
+            self.framebuffers["FRONT"],
+            gpu.GPU.DEPTH_ATTACHMENT,
+            gpu.GPU.DEPTH_COMPONENT32F,
+            self.width,
+            self.height
+        )
 
-        # Descomente as seguintes linhas se for usar um Framebuffer para profundidade
-        # gpu.GPU.framebuffer_storage(
-        #     self.framebuffers["FRONT"],
-        #     gpu.GPU.DEPTH_ATTACHMENT,
-        #     gpu.GPU.DEPTH_COMPONENT32F,
-        #     self.width,
-        #     self.height
-        # )
-    
-        # Opções:
-        # - COLOR_ATTACHMENT: alocações para as cores da imagem renderizada
-        # - DEPTH_ATTACHMENT: alocações para as profundidades da imagem renderizada
-        # Obs: Você pode chamar duas vezes a rotina com cada tipo de buffer.
-
-        # Tipos de dados:
-        # - RGB8: Para canais de cores (Vermelho, Verde, Azul) 8bits cada (0-255)
-        # - RGBA8: Para canais de cores (Vermelho, Verde, Azul, Transparência) 8bits cada (0-255)
-        # - DEPTH_COMPONENT16: Para canal de Profundidade de 16bits (half-precision) (0-65535)
-        # - DEPTH_COMPONENT32F: Para canal de Profundidade de 32bits (single-precision) (float)
+        #   Cria framebuffer para supersampling
+        self.framebuffers["SS"] = fbos[1]
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
+        gpu.GPU.framebuffer_storage(
+            self.framebuffers["SS"],
+            gpu.GPU.COLOR_ATTACHMENT,
+            gpu.GPU.RGB8,
+            self.width * self.ss_factor,
+            self.height * self.ss_factor
+        )
+        gpu.GPU.framebuffer_storage(
+            self.framebuffers["SS"],
+            gpu.GPU.DEPTH_ATTACHMENT,
+            gpu.GPU.DEPTH_COMPONENT32F,
+            self.width * self.ss_factor,
+            self.height * self.ss_factor
+        )
 
         # Define cor que ira apagar o FrameBuffer quando clear_buffer() invocado
         gpu.GPU.clear_color([0, 0, 0])
 
         # Define a profundidade que ira apagar o FrameBuffer quando clear_buffer() invocado
-        # Assuma 1.0 o mais afastado e -1.0 o mais próximo da camera
-        gpu.GPU.clear_depth(1.0)
+        gpu.GPU.clear_depth(2**32 - 1)
 
-        # Definindo tamanho do Viewport para renderização
-        self.scene.viewport(width=self.width, height=self.height)
+        # Define tamanho do Viewport para renderização
+        self.scene.viewport(width=self.width * self.ss_factor, height=self.height * self.ss_factor)
 
     def pre(self):
         """Rotinas pré renderização."""
@@ -106,11 +99,55 @@ class Renderizador:
         # Retorna o valor do pixel no framebuffer: read_pixel(coord, mode)
 
     def pos(self):
-        """Rotinas pós renderização."""
-        # Função invocada após o processo de renderização terminar.
+        """Post-rendering routine: downsample SS to FRONT and push FRONT to screen."""
+        # Criar uma imagem final e um buffer de profundidade final
+        final_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        final_depth = np.full((self.height, self.width), np.inf)  
 
-        # Método para a troca dos buffers (NÃO IMPLEMENTADO)
-        gpu.GPU.swap_buffers()
+        # Binda o SS so pra garantir
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
+
+        # Downsample do SS para as imagens
+        for y in range(self.height):
+            for x in range(self.width):
+                r, g, b = 0, 0, 0
+                count = 0
+                min_depth = np.inf  
+
+                # Itera os pixels a serem downsampled
+                for sy in range(self.ss_factor):
+                    for sx in range(self.ss_factor):
+                        # Calcula o pixel a ser lido
+                        ix = x * self.ss_factor + sx
+                        iy = y * self.ss_factor + sy
+
+                        # Le a cor e a profundidade do pixel
+                        pixel_color = gpu.GPU.read_pixel([ix, iy], gpu.GPU.RGB8)
+                        pixel_depth = gpu.GPU.read_pixel([ix, iy], gpu.GPU.DEPTH_COMPONENT32F)[0]
+
+                        # Checa se a profundidade é menor que a mínima
+                        if pixel_depth < min_depth:
+                            min_depth = pixel_depth
+                        # Soma as cores
+                        r += pixel_color[0]
+                        g += pixel_color[1]
+                        b += pixel_color[2]
+                        count += 1
+
+                # Pega a média das cores
+                final_image[y, x, 0] = r // count
+                final_image[y, x, 1] = g // count
+                final_image[y, x, 2] = b // count
+                final_depth[y, x] = min_depth
+
+        # Binda o framebuffer final
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
+
+        # Itera sobre a imagem final e escreve no framebuffer final
+        for y in range(self.height):
+            for x in range(self.width):
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, final_image[y, x].tolist())
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [final_depth[y, x]])
 
     def mapping(self):
         """Mapeamento de funções para as rotinas de renderização."""
@@ -141,6 +178,7 @@ class Renderizador:
         self.pre()  # executa rotina pré renderização
         self.scene.render()  # faz o traversal no grafo de cena
         self.pos()  # executa rotina pós renderização
+        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
         return gpu.GPU.get_frame_buffer()
 
     def main(self):

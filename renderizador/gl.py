@@ -19,7 +19,7 @@ from numpy.linalg import inv
 class GL:
     """Classe que representa a biblioteca gráfica (Graphics Library)."""
 
-    width = 800   # largura da tela
+    width = 800  # largura da tela
     height = 600  # altura da tela
     near = 0.01   # plano de corte próximo
     far = 1000    # plano de corte distante
@@ -30,8 +30,8 @@ class GL:
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
-        GL.width = width
-        GL.height = height
+        GL.width = width*2
+        GL.height = height*2
         GL.near = near
         GL.far = far
 
@@ -54,8 +54,8 @@ class GL:
         
         # Loopa pela lista de pontos e desenha eles
         for i in range(0, len(point),2):
-            x = int(point[i])
-            y = int(point[i + 1])
+            x = int(point[i])*2
+            y = int(point[i + 1])*2
             # Desenha o ponto
             gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, [r, g, b])
         
@@ -116,8 +116,8 @@ class GL:
                 
         # Loopa pela lista de pontos e desenha eles
         for i in range(0, len(lineSegments)-2,2):
-            p0 = (int(lineSegments[i]),int(lineSegments[i + 1]))
-            p1 = (int(lineSegments[i + 2]),int(lineSegments[i + 3]))
+            p0 = (int(lineSegments[i])*2,int(lineSegments[i + 1])*2)
+            p1 = (int(lineSegments[i + 2])*2,int(lineSegments[i + 3])*2)
             desenha_linha(p0,p1,rgb)
 
     @staticmethod
@@ -127,8 +127,8 @@ class GL:
 
         #Referencia: https://www.geeksforgeeks.org/bresenhams-circle-drawing-algorithm/
         x = 0
-        y = radius
-        d = 3 - 2 * radius  # Initial decision parameter
+        y = radius*2
+        d = 3 - 4 * radius  # Initial decision parameter
 
         # Screen bounds (replace these with the actual screen dimensions)
         xmax, ymax = GL.width, GL.height
@@ -161,10 +161,12 @@ class GL:
             draw_circle_points(0, 0, x, y, rgb)
 
     @staticmethod
-    def triangleSet2D(vertices, colors, color_vertices=None, color_per_vertex=False, Z=None):
+    def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None):
         # Cor emissiva ou difusa (default)
         emissiveColor = colors.get('emissiveColor')
         diffuseColor = colors.get('diffuseColor')
+        transparency = colors.get('transparency')
+        
         
         if emissiveColor == [0, 0, 0]:
             default_rgb = [int(diffuseColor[0] * 255), int(diffuseColor[1] * 255), int(diffuseColor[2] * 255)]
@@ -216,8 +218,37 @@ class GL:
             g = (alpha * c0[1] / Z[0] + beta * c1[1] / Z[1] + gamma * c2[1] / Z[2]) * Z_interpolated
             b = (alpha * c0[2] / Z[0] + beta * c1[2] / Z[1] + gamma * c2[2] / Z[2]) * Z_interpolated
 
-            return [int(r * 255), int(g * 255), int(b * 255)]
+            return [int(r * 255), int(g * 255), int(b * 255)], Z_interpolated
         
+        def draw_pixel_with_depth(x, y, Z, rgb):
+            # Lê o valor de profundidade atual do Z-buffer para o pixel (x, y)
+            current_depth = gpu.GPU.read_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F)
+            
+            # Lê a cor atual do pixel (x, y)
+            current_color = gpu.GPU.read_pixel([x, y], gpu.GPU.RGB8)
+            if Z < current_depth[0]:
+                # Atualiza o Z-buffer com o novo valor de profundidade
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.DEPTH_COMPONENT32F, [Z])
+
+                #Aplica a transparencia
+                previous_color = current_color*transparency
+                new_color = np.array(rgb)*(1-transparency)
+
+                #Atualiza a cor do pixel com transparencia
+                gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8,(previous_color + new_color).astype(int))
+
+        def z_buffer(z, near, far):
+            #Constantes para a fórmula de Z-buffer
+            A = -(far + near) / (far - near)
+            B = -2 * far * near / (far - near)
+            #Converte Z para NDC
+            z_ndc = (A * z + B) / (-z)
+            #Normaliza Z para o intervalo [0, 1]
+            z_normalized = (z_ndc + 1) / 2
+            #Converte Z para 32 bits
+            z_buffer_32b = round(z_normalized * (2**32 - 1))
+            return z_buffer_32b
+
         def desenha_triangulo(p0, p1, p2, c0, c1, c2):
             # Definir bounding box para o triângulo
             xmin = int(np.floor(min(p0[0], p1[0], p2[0])))
@@ -235,20 +266,31 @@ class GL:
             for x in range(xmin, xmax):
                 for y in range(ymin, ymax):
                     if inside_triangle(x + 0.5, y + 0.5, p0, p1, p2):
-                        if color_per_vertex:
-                            # Interpolar a cor do ponto atual usando as cores dos vértices
-                            interpolated_rgb = interpolated_color((x + 0.5, y + 0.5), p0, p1, p2, c0, c1, c2, Z)
+                        if Z is None:
+                            draw_pixel_with_depth(x, y, 0, default_rgb)
                         else:
-                            # Usar a cor padrão se `color_per_vertex` for False
-                            interpolated_rgb = default_rgb
-                        # Desenhar o pixel com a cor interpolada
-                        gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, interpolated_rgb)
+                            if color_per_vertex:
+                                # Interpolar a cor do ponto atual usando as cores dos vértices e a profundidade interpolada
+                                interpolated_rgb, Z_interpolated = interpolated_color((x + 0.5, y + 0.5), p0, p1, p2, c0, c1, c2, Z)
+                            else:
+                                # Usar a cor padrão se `color_per_vertex` for False
+                                interpolated_rgb = default_rgb
+                                # Calcular a profundidade interpolada
+                                alpha, beta, gamma = barycentric_coords((x + 0.5, y + 0.5), p0, p1, p2)
+                                Z_interpolated = 1 / (alpha / Z[0] + beta / Z[1] + gamma / Z[2])
+                            z_32b = z_buffer(Z_interpolated, GL.near, GL.far)
+                            draw_pixel_with_depth(x, y, z_32b, interpolated_rgb)
 
         # Loopa pela lista de vértices e desenha os triângulos
         for i in range(0, len(vertices), 6):
-            p0 = (vertices[i], vertices[i + 1])
-            p1 = (vertices[i + 2], vertices[i + 3])
-            p2 = (vertices[i + 4], vertices[i + 5])
+            if Z is not None:
+                p0 = (vertices[i], vertices[i + 1])
+                p1 = (vertices[i + 2], vertices[i + 3])
+                p2 = (vertices[i + 4], vertices[i + 5])
+            else:
+                p0 = (vertices[i]*2, vertices[i + 1]*2)
+                p1 = (vertices[i + 2]*2, vertices[i + 3]*2)
+                p2 = (vertices[i + 4]*2, vertices[i + 5]*2)
 
             if color_per_vertex:
                 # Usar as cores fornecidas para cada vértice
@@ -258,7 +300,6 @@ class GL:
             else:
                 # Usar a cor padrão se `color_vertices` for False
                 c0 = c1 = c2 = default_rgb
-            
             desenha_triangulo(p0, p1, p2, c0, c1, c2)
 
 
@@ -310,8 +351,8 @@ class GL:
             p2 = np.array([vertices_NDC[0][2]/vertices_NDC[3][2],vertices_NDC[1][2]/vertices_NDC[3][2], vertices_NDC[2][2]/vertices_NDC[3][2]])
 
             #Aplica a matriz da tela nos vertices
-            w = 300
-            h = 200
+            w = GL.width
+            h = GL.height
             tela = np.array([[w/2,0,0,w/2],
                             [0,-h/2,0,h/2],
                             [0,0,1,0],
@@ -382,13 +423,13 @@ class GL:
 
 
         #Calcula a matriz de projeção
-        w = 300
-        h = 200
+        w = GL.width
+        h = GL.height
         fovy = 2 * np.arctan(np.tan(fieldOfView / 2) * (h/((w**2 + h**2)**0.5)))
 
         aspect = w/h
-        near = 0.01
-        far = 1000
+        near = GL.near
+        far = GL.far
         top = near * np.tan(fovy)
         right = top * aspect
 
