@@ -30,8 +30,8 @@ class GL:
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
-        GL.width = width*2
-        GL.height = height*2
+        GL.width = width
+        GL.height = height
         GL.near = near
         GL.far = far
 

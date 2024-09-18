@@ -196,8 +196,8 @@ class Renderizador:
 
         # Iniciando Biblioteca Gráfica
         gl.GL.setup(
-            self.width,
-            self.height,
+            self.width*self.ss_factor,
+            self.height*self.ss_factor,
             near=0.01,
             far=1000
         )
