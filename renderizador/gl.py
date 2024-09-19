@@ -265,18 +265,18 @@ class GL:
             # Percorrer todos os pixels no bounding box
             for x in range(xmin, xmax):
                 for y in range(ymin, ymax):
-                    if inside_triangle(x + 0.5, y + 0.5, p0, p1, p2):
+                    if inside_triangle(x+0.25, y+0.25, p0, p1, p2):
                         if Z is None:
                             draw_pixel_with_depth(x, y, 0, default_rgb)
                         else:
                             if color_per_vertex:
                                 # Interpolar a cor do ponto atual usando as cores dos vértices e a profundidade interpolada
-                                interpolated_rgb, Z_interpolated = interpolated_color((x + 0.5, y + 0.5), p0, p1, p2, c0, c1, c2, Z)
+                                interpolated_rgb, Z_interpolated = interpolated_color((x + 0.25, y + 0.25), p0, p1, p2, c0, c1, c2, Z)
                             else:
                                 # Usar a cor padrão se `color_per_vertex` for False
                                 interpolated_rgb = default_rgb
                                 # Calcular a profundidade interpolada
-                                alpha, beta, gamma = barycentric_coords((x + 0.5, y + 0.5), p0, p1, p2)
+                                alpha, beta, gamma = barycentric_coords((x + 0.25, y + 0.25), p0, p1, p2)
                                 Z_interpolated = 1 / (alpha / Z[0] + beta / Z[1] + gamma / Z[2])
                             z_32b = z_buffer(Z_interpolated, GL.near, GL.far)
                             draw_pixel_with_depth(x, y, z_32b, interpolated_rgb)
