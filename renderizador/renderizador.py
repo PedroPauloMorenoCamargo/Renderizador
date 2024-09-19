@@ -82,6 +82,7 @@ class Renderizador:
         """Rotinas pré renderização."""
         # Função invocada antes do processo de renderização iniciar.
         gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
+
         # Limpa o frame buffers atual
         gpu.GPU.clear_buffer()
 
