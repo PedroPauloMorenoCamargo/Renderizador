@@ -95,8 +95,6 @@ class Renderizador:
         # Criar uma imagem final e um buffer de profundidade final
         final_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
-        # Binda o SS so pra garantir
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
 
         # Downsample do SS para as imagens
         for y in range(self.height):

@@ -184,7 +184,8 @@ class GL:
             L0 = sign(x, y, p0, p1)
             L1 = sign(x, y, p1, p2)
             L2 = sign(x, y, p2, p0)
-            return (L0 >= 0 and L1 >= 0 and L2 >= 0)
+            threshold = -1e-6
+            return (L0 >= threshold and L1 >= threshold and L2 >= threshold)
         
         def barycentric_coords(p, p0, p1, p2):
             #Parametros para calculo da interpolação baricentrica
@@ -357,9 +358,10 @@ class GL:
 
             # Calcula o nível do MipMap
             D = max(0,np.log2(L))
-
+            
             #Seleciona a textura
             mip_level = math.floor(np.clip(D, 0, len(GL.mipmaps) - 1))
+
             selected_texture = GL.mipmaps[mip_level]
             texture_color = bilinear_interpolation(uv, selected_texture)
 
