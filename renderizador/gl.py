@@ -28,7 +28,7 @@ class GL:
     P = np.identity(4)
     forward_direction = np.array([0,0,1])
     transform = [np.identity(4)]
-    mimaps = None
+    mipmaps = []
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
@@ -163,7 +163,7 @@ class GL:
             draw_circle_points(0, 0, x, y, rgb)
 
     @staticmethod
-    def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None,tex_coords=None, texture=None):
+    def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None,tex_coords = None,texture = None):
         # Cor emissiva ou difusa (default)
         emissiveColor = colors.get('emissiveColor')
         diffuseColor = colors.get('diffuseColor')
@@ -186,37 +186,8 @@ class GL:
             L2 = sign(x, y, p2, p0)
             return (L0 >= 0 and L1 >= 0 and L2 >= 0)
         
-        def bilinear_interpolation(uv, texture):
-            u,v = uv
-            width, height = texture.shape[1], texture.shape[0]
-
-            u = 1-u
-            # Scale UV coordinates to texture dimensions
-            u = u * (width - 1)
-            v = v * (height - 1)
-            
-            # Calculate coordinates of the four surrounding texels
-            x0, y0 = int(np.floor(u)), int(np.floor(v))
-            x1, y1 = min(x0 + 1, width - 1), min(y0 + 1, height - 1)
-
-            # Calculate fractional part of u and v
-            u_ratio = u - x0
-            v_ratio = v - y0
-
-            # Get the four surrounding texel colors
-            texel00 = texture[y0, x0]
-            texel01 = texture[y0, x1]
-            texel10 = texture[y1, x0]
-            texel11 = texture[y1, x1]
-
-            # Perform bilinear interpolation
-            color_top = texel00 * (1 - u_ratio) + texel01 * u_ratio
-            color_bottom = texel10 * (1 - u_ratio) + texel11 * u_ratio
-            final_color = color_top * (1 - v_ratio) + color_bottom * v_ratio
-
-            return final_color.astype(int)
-
         def barycentric_coords(p, p0, p1, p2):
+            #Parametros para calculo da interpolação baricentrica
             x, y = p
             xA, yA = p0
             xB, yB = p1
@@ -238,30 +209,14 @@ class GL:
             return alpha, beta, gamma
 
         
-        def interpolated_color(p, p0, p1, p2, c0, c1, c2, Z):
-            # Calcular as coordenadas baricêntricas
-            alpha, beta, gamma = barycentric_coords(p, p0, p1, p2)
-            # Calculate the interpolated UV coordinates
-    
-            # Use bilinear interpolation to get the texture color
-            if texture is not None:
-                v = alpha * tex_coords[0][0] + beta * tex_coords[1][0] + gamma * tex_coords[2][0]
-                u = alpha * tex_coords[0][1] + beta * tex_coords[1][1] + gamma * tex_coords[2][1]
-                uv = (u, v)
-                
-                texture_color = bilinear_interpolation(uv, texture)
-            else:
-                texture_color = [255, 255, 255]  # Default white color if no texture
-
-            # Calcular o valor de Z ponderado usando as coordenadas baricêntricas
-            Z_interpolated = 1 / (alpha / Z[0] + beta / Z[1] + gamma / Z[2])
-            # Interpolar as cores ajustadas pela profundidade Z
-            r = (alpha * c0[0] / Z[0] + beta * c1[0] / Z[1] + gamma * c2[0] / Z[2]) * Z_interpolated
-            g = (alpha * c0[1] / Z[0] + beta * c1[1] / Z[1] + gamma * c2[1] / Z[2]) * Z_interpolated
-            b = (alpha * c0[2] / Z[0] + beta * c1[2] / Z[1] + gamma * c2[2] / Z[2]) * Z_interpolated
+        def interpolated_color(alpha_parameter,beta_parameter,gamma_parameter, interpolated_Z,c0, c1, c2):
             
-            final_color = [int(r * texture_color[0] / 255),int(g * texture_color[1] / 255),int(b * texture_color[2] / 255)]
-            return final_color, Z_interpolated
+            # Interpolar as cores ajustadas pela profundidade Z
+            r = (alpha_parameter * c0[0] + beta_parameter * c1[0] + gamma_parameter * c2[0]) * interpolated_Z
+            g = (alpha_parameter * c0[1] + beta_parameter * c1[1] + gamma_parameter * c2[1]) * interpolated_Z
+            b = (alpha_parameter * c0[2] + beta_parameter * c1[2] + gamma_parameter * c2[2]) * interpolated_Z
+
+            return [int(r * 255), int(g * 255), int(b * 255)]
         
         def draw_pixel_with_depth(x, y, Z, rgb):
             # Lê o valor de profundidade atual do Z-buffer para o pixel (x, y)
@@ -291,8 +246,126 @@ class GL:
             #Converte Z para 32 bits
             z_buffer_32b = round(z_normalized * (2**32 - 1))
             return z_buffer_32b
+
+        def bilinear_interpolation(uv, texture):
+            # Extrai as coordenadas u e v
+            u, v = uv
+            # Extrai as dimensões da textura
+            height, width = texture.shape[0], texture.shape[1]
+            
+            u = 1 - u
+            # Normaliza as coordenadas UV para o intervalo [0, 1]
+            u = np.clip(u, 0.0, 1.0)
+            v = np.clip(v, 0.0, 1.0)
+
+            # Converte as coordenadas UV para coordenadas de textura        
+            u = u * (width - 1)
+            #Inverte a coordenada v para que a origem seja no canto superior esquerdo e va para baixo
+            v = v * (height - 1) 
+
+            # Calcula os índices dos quatro texels vizinhos
+            x0, y0 = int(np.floor(u)), int(np.floor(v))
+            x1, y1 = min(x0 + 1, width - 1), min(y0 + 1, height - 1)
+
+            # Calcula a razão Horizontal e Vertical para interpolação bilinear
+            s_ratio = u - x0
+            t_ratio = v - y0
+
+            # Pegar os texels vizinhos
+            texel00 = texture[y0, x0]
+            texel01 = texture[y1, x0]
+            texel10 = texture[y0, x1]
+            texel11 = texture[y1, x1]
+
+            # Interpola Horizontalmente
+            color_top = texel00 * (1 - s_ratio) + texel10 * s_ratio
+            color_bottom = texel01 * (1 - s_ratio) + texel11 * s_ratio
+            #Interpola Verticalmente
+            final_color = color_top * (1 - t_ratio) + color_bottom * t_ratio
+
+            return final_color.astype(int)
         
-        def desenha_triangulo(p0, p1, p2, c0, c1, c2):
+        def apply_texture(p, p0, p1,tex_coords, texture,Z):
+
+            #Multiplicador para calculo MipMap  
+            multiplier = texture.shape[0]
+
+            alpha, beta, gamma = barycentric_coords(p, p0, p1, p2)
+            
+            # Calcula cordenadas baricentricas corrigidas pela perspectiva
+            w0 = alpha / Z[0]
+            w1 = beta / Z[1]
+            w2 = gamma / Z[2]
+            w_sum = w0 + w1 + w2
+
+            alpha_p = w0 / w_sum
+            beta_p = w1 / w_sum
+            gamma_p = w2 / w_sum
+
+            #Cordenadas UV
+            v = alpha_p * tex_coords[0][0] + beta_p * tex_coords[1][0] + gamma_p * tex_coords[2][0]
+            u = alpha_p * tex_coords[0][1] + beta_p * tex_coords[1][1] + gamma_p * tex_coords[2][1]
+
+            uv = (u, v)
+            
+            #Delta para calcular derivadas
+            delta = 1
+
+            # Pixels vizinhos
+            p_dx = (p[0] + delta, p[1])
+            p_dy = (p[0], p[1] + delta)
+
+            # Calcula os parâmetros baricêntricos para os pixels vizinhos
+            alpha_dx, beta_dx, gamma_dx = barycentric_coords(p_dx, p0, p1, p2)
+            alpha_dy, beta_dy, gamma_dy = barycentric_coords(p_dy, p0, p1, p2)
+
+            # Corrige os parâmetros baricêntricos para a perspectiva
+            w0_dx = alpha_dx / Z[0]
+            w1_dx = beta_dx / Z[1]
+            w2_dx = gamma_dx / Z[2]
+            w_sum_dx = w0_dx + w1_dx + w2_dx
+
+            alpha_p_dx = w0_dx / w_sum_dx
+            beta_p_dx = w1_dx / w_sum_dx
+            gamma_p_dx = w2_dx / w_sum_dx
+
+            w0_dy = alpha_dy / Z[0]
+            w1_dy = beta_dy / Z[1]
+            w2_dy = gamma_dy / Z[2]
+            w_sum_dy = w0_dy + w1_dy + w2_dy
+
+            alpha_p_dy = w0_dy / w_sum_dy
+            beta_p_dy = w1_dy / w_sum_dy
+            gamma_p_dy = w2_dy / w_sum_dy
+
+            # Calcula as coordenadas UV para os pixels vizinhos
+            v_dx = alpha_p_dx * tex_coords[0][0] + beta_p_dx * tex_coords[1][0] + gamma_p_dx * tex_coords[2][0]
+            u_dx = alpha_p_dx * tex_coords[0][1] + beta_p_dx * tex_coords[1][1] + gamma_p_dx * tex_coords[2][1]
+
+            v_dy = alpha_p_dy * tex_coords[0][0] + beta_p_dy * tex_coords[1][0] + gamma_p_dy * tex_coords[2][0]
+            u_dy = alpha_p_dy * tex_coords[0][1] + beta_p_dy * tex_coords[1][1] + gamma_p_dy * tex_coords[2][1]
+
+            # Calcula as derivadas parciais
+            dudx = multiplier*(u_dx - u)/delta
+            dvdx = multiplier*(v_dx - v)/delta
+            dudy = multiplier*(u_dy - u)/delta
+            dvdy = multiplier*(v_dy - v)/delta
+
+            # Calcula o comprimento do gradiente
+            L = max(np.sqrt(dudx ** 2 + dvdx ** 2),np.sqrt(dudy ** 2 + dvdy ** 2))
+
+            # Calcula o nível do MipMap
+            D = max(0,np.log2(L))
+
+            #Seleciona a textura
+            mip_level = math.floor(np.clip(D, 0, len(GL.mipmaps) - 1))
+            selected_texture = GL.mipmaps[mip_level]
+            texture_color = bilinear_interpolation(uv, selected_texture)
+
+            return [texture_color[0], texture_color[1], texture_color[2]]
+
+    
+        def draw_triangle(p0, p1, p2, c0, c1, c2):
             # Definir bounding box para o triângulo
             xmin = int(np.floor(min(p0[0], p1[0], p2[0])))
             xmax = int(np.ceil(max(p0[0], p1[0], p2[0])))
@@ -312,37 +385,50 @@ class GL:
                         if Z is None:
                             draw_pixel_with_depth(x, y, 0, default_rgb)
                         else:
-                            interpolated_rgb, Z_interpolated = interpolated_color((x + 0.25, y + 0.25), p0, p1, p2, c0, c1, c2, Z)
+                            #Pega o ponto atual
+                            ponto_atual = (x + 0.25, y + 0.25)
+                            #Calcula os parametros da interpolação baricentrica
+                            alpha, beta, gamma = barycentric_coords(ponto_atual, p0, p1, p2)
+                            #Calcula a profundidade interpolada
+                            Z_interpolated = 1 / (alpha / Z[0] + beta / Z[1] + gamma / Z[2])
+                            interpolated_rgb = default_rgb
+                            if color_per_vertex:
+                                # Interpolar a cor do ponto atual usando as cores dos vértices e a profundidade interpolada
+                                interpolated_rgb = interpolated_color(alpha/Z[0],beta/Z[1],gamma/Z[2],Z_interpolated ,c0, c1, c2)
+                            if texture is not None:
+                                # Aplica a textura no pixel atual
+                                interpolated_rgb = apply_texture(ponto_atual, p0, p1, tex_coords, texture,Z)
+                            #Calcula o valor de profundidade da tela em 32 bits
                             z_32b = z_buffer(Z_interpolated, GL.near, GL.far)
                             draw_pixel_with_depth(x, y, z_32b, interpolated_rgb)
 
         # Loopa pela lista de vértices e desenha os triângulos
         for i in range(0, len(vertices), 6):
+            #Triangulos 3D
             if Z is not None:
                 p0 = (vertices[i], vertices[i + 1])
                 p1 = (vertices[i + 2], vertices[i + 3])
                 p2 = (vertices[i + 4], vertices[i + 5])
+            #Triangulos 2D
             else:
                 p0 = (vertices[i]*2, vertices[i + 1]*2)
                 p1 = (vertices[i + 2]*2, vertices[i + 3]*2)
                 p2 = (vertices[i + 4]*2, vertices[i + 5]*2)
-
+            # Cores dos vértices
             if color_per_vertex:
-                # Usar as cores fornecidas para cada vértice
                 c0 = color_vertices[0]
                 c1 = color_vertices[1]
                 c2 = color_vertices[2]
             else:
-                # Usar a cor padrão se `color_vertices` for False
                 c0 = c1 = c2 = default_rgb
-            desenha_triangulo(p0, p1, p2, c0, c1, c2)
+            draw_triangle(p0, p1, p2, c0, c1, c2)
 
 
 
 
 
     @staticmethod
-    def triangleSet(point, colors,color_vertices= None,color_per_vertex = False, tex_coords=None, texture=None):
+    def triangleSet(point, colors,color_vertices= None,color_per_vertex = False,text_coords = None,texture = None):
         """Função usada para renderizar TriangleSet."""
         # Nessa função você receberá pontos no parâmetro point, esses pontos são uma lista
         # de pontos x, y, e z sempre na ordem. Assim point[0] é o valor da coordenada x do
@@ -405,7 +491,7 @@ class GL:
             pontos = np.array([vertices_finais[0][0], vertices_finais[1][0],
                         vertices_finais[0][1], vertices_finais[1][1],
                         vertices_finais[0][2], vertices_finais[1][2]])
-            GL.triangleSet2D(pontos, colors, color_vertices, color_per_vertex,Z,tex_coords,texture)
+            GL.triangleSet2D(pontos, colors, color_vertices, color_per_vertex,Z,text_coords,texture)
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -629,19 +715,18 @@ class GL:
         # Exemplo de desenho de um pixel branco na coordenada 10, 10
         gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
 
-
-
     def generate_mipmaps(texture):
         mipmaps = []
         mipmaps.append(texture)
         
-        # Generate mipmaps by halving the texture dimensions until 1x1
+        # Gera os níveis de mipmaps até que a textura tenha 1x1 pixels
         while texture.shape[1] > 1 and texture.shape[0] > 1:
             # Reduce the size of the texture by half
             texture = cv2.resize(texture, (max(1, texture.shape[1] // 2), max(1, texture.shape[0] // 2)), interpolation=cv2.INTER_LINEAR)
             mipmaps.append(texture)
         
         return mipmaps
+    
     @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
                        texCoord, texCoordIndex, colors, current_texture):
@@ -665,11 +750,8 @@ class GL:
         # textura para o poligono, para isso, use as coordenadas de textura e depois aplique a
         # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
         # implementadado um método para a leitura de imagens.
-        #Cria as condições iniciais para o código não crashar]
 
-        print("Text Coords: ", texCoord)
-        print("Text Coords Index: ", texCoordIndex)
-        print("Current Texture: ", current_texture)
+        #Cria as condições iniciais para o código não crashar
         current_face = [] 
         image = None
         if not colorPerVertex:
@@ -680,10 +762,14 @@ class GL:
                 color = [1, 1, 1]
         if current_texture:
             image = gpu.GPU.load_texture(current_texture[0])
-            GL.mimaps = GL.generate_mipmaps(image)
-        #Loopa pelos Indexes
+            GL.mipmaps = GL.generate_mipmaps(image)
+            if not texCoordIndex:
+                texCoordIndex = coordIndex
+
+
         for index in coordIndex:
             if index == -1:
+                #Processa a face atual
                 if len(current_face) >= 3:
                     for x in range(1, len(current_face) - 1):
                         p0, c0, t0 = current_face[0]
@@ -701,6 +787,7 @@ class GL:
                         GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors, color_vertices, colorPerVertex, [uv0, uv1, uv2], image)
                 current_face = []
             else:
+                #Adiciona os parametros da face atual
                 current_face.append((coord[index * 3: index * 3 + 3], colorIndex[index] if colorPerVertex else 0, texCoordIndex[index] if texCoord else 0))
 
     @staticmethod
