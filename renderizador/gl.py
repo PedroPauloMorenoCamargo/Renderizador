@@ -211,6 +211,7 @@ class GL:
         
         def interpolated_color(alpha_parameter,beta_parameter,gamma_parameter, interpolated_Z,c0, c1, c2):
             
+
             # Interpolar as cores ajustadas pela profundidade Z
             r = (alpha_parameter * c0[0] + beta_parameter * c1[0] + gamma_parameter * c2[0]) * interpolated_Z
             g = (alpha_parameter * c0[1] + beta_parameter * c1[1] + gamma_parameter * c2[1]) * interpolated_Z
@@ -289,7 +290,7 @@ class GL:
 
             #Multiplicador para calculo MipMap  
             multiplier = texture.shape[0]
-
+            
             alpha, beta, gamma = barycentric_coords(p, p0, p1, p2)
             
             # Calcula cordenadas baricentricas corrigidas pela perspectiva
@@ -367,26 +368,27 @@ class GL:
     
         def draw_triangle(p0, p1, p2, c0, c1, c2):
             # Definir bounding box para o triângulo
-            xmin = int(np.floor(min(p0[0], p1[0], p2[0])))
-            xmax = int(np.ceil(max(p0[0], p1[0], p2[0])))
-            ymin = int(np.floor(min(p0[1], p1[1], p2[1])))
-            ymax = int(np.ceil(max(p0[1], p1[1], p2[1])))
+            xmin = int(np.floor(min(p0[0], min(p1[0], p2[0]))))
+            xmax = int(np.ceil(max(p0[0], max(p1[0], p2[0]))))
+            ymin = int(np.floor(min(p0[1], min(p1[1], p2[1]))))
+            ymax = int(np.ceil(max(p0[1], max(p1[1], p2[1]))))
+
 
             # Limites da tela
             xmin = max(xmin, 0)
             ymin = max(ymin, 0)
-            xmax = min(xmax, GL.width)
-            ymax = min(ymax, GL.height)
+            xmax = min(xmax, GL.width-1)
+            ymax = min(ymax, GL.height-1)
 
             # Percorrer todos os pixels no bounding box
             for x in range(xmin, xmax):
                 for y in range(ymin, ymax):
-                    if inside_triangle(x+0.25, y+0.25, p0, p1, p2):
+                    if inside_triangle(x+0.5, y+0.5, p0, p1, p2):
                         if Z is None:
                             draw_pixel_with_depth(x, y, 0, default_rgb)
                         else:
                             #Pega o ponto atual
-                            ponto_atual = (x + 0.25, y + 0.25)
+                            ponto_atual = (x + 0.5, y + 0.5)
                             #Calcula os parametros da interpolação baricentrica
                             alpha, beta, gamma = barycentric_coords(ponto_atual, p0, p1, p2)
                             #Calcula a profundidade interpolada
