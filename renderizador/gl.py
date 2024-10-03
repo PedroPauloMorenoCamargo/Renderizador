@@ -287,7 +287,7 @@ class GL:
 
             return final_color.astype(int)
         
-        def apply_texture(p, p0, p1,tex_coords, texture,Z):
+        def apply_texture(p, p0, p1,p2,tex_coords, texture,Z):
 
             #Multiplicador para calculo MipMap  
             multiplier = texture.shape[0]
@@ -401,7 +401,7 @@ class GL:
                                 interpolated_rgb = interpolated_color(alpha/Z[0],beta/Z[1],gamma/Z[2],Z_interpolated ,c0, c1, c2)
                             if texture is not None:
                                 # Aplica a textura no pixel atual
-                                interpolated_rgb = apply_texture(ponto_atual, p0, p1, tex_coords, texture,Z)
+                                interpolated_rgb = apply_texture(ponto_atual, p0, p1,p2, tex_coords, texture,Z)
                             #Calcula o valor de profundidade da tela em 32 bits
                             z_32b = z_buffer(Z_interpolated, GL.near, GL.far)
                             draw_pixel_with_depth(x, y, z_32b, interpolated_rgb)
