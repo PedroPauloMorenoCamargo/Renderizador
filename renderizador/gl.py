@@ -712,12 +712,53 @@ class GL:
         # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
+        #Pega os pontos
+        coordinate_x = size[0]/2
+        coordinate_y = size[1]/2
+        coordinate_z = size[2]/2
+        # Cria os pontos da caixa
+        points = [
+            #P0
+            -coordinate_x, coordinate_y, -coordinate_z,
+            #P1
+            -coordinate_x, coordinate_y, coordinate_z,
+            #P2
+            coordinate_x, coordinate_y, coordinate_z,
+            #P3
+            coordinate_x, coordinate_y, -coordinate_z,
+            #P4
+            -coordinate_x, -coordinate_y, -coordinate_z,
+            #P5
+            -coordinate_x, -coordinate_y, coordinate_z,
+            #P6
+            coordinate_x, -coordinate_y, coordinate_z,
+            #P7
+            coordinate_x, -coordinate_y, -coordinate_z
+
+        ]
+
+        coordIndex = [
+            #Face1
+            0,1,2,3,-1,
+            #Face2
+            0,4,5,1,-1,
+            #Face3
+            1,5,6,2,-1,
+            #Face4
+            2,6,7,3,-1,
+            #Face5
+            3,7,4,0,-1,
+            #Face6
+            4,7,6,5,-1
+        ]
+
+        #Desenha a caixa por strip
+        
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
         print("Box : size = {0}".format(size)) # imprime no terminal pontos
         print("Box : colors = {0}".format(colors)) # imprime no terminal as cores
 
-        # Exemplo de desenho de um pixel branco na coordenada 10, 10
-        gpu.GPU.draw_pixel([10, 10], gpu.GPU.RGB8, [255, 255, 255])  # altera pixel
+        GL.indexedFaceSet(points, coordIndex, False, None, None, None, None, colors, None)
 
     def generate_mipmaps(texture):
         mipmaps = []
@@ -794,18 +835,61 @@ class GL:
                 #Adiciona os parametros da face atual
                 current_face.append((coord[index * 3: index * 3 + 3], colorIndex[index] if colorPerVertex else 0, texCoordIndex[index] if texCoord else 0))
 
-    @staticmethod
     def sphere(radius, colors):
         """Função usada para renderizar Esferas."""
-        # A função sphere é usada para desenhar esferas na cena. O esfera é centrada no
-        # (0, 0, 0) no sistema de coordenadas local. O argumento radius especifica o
-        # raio da esfera que está sendo criada. Para desenha essa esfera você vai
-        # precisar tesselar ela em triângulos, para isso encontre os vértices e defina
-        # os triângulos.
+        # A esfera é centrada no (0, 0, 0) no sistema de coordenadas local.
+        # O eixo Y é o eixo vertical (up axis).
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Sphere : radius = {0}".format(radius)) # imprime no terminal o raio da esfera
-        print("Sphere : colors = {0}".format(colors)) # imprime no terminal as cores
+        # Número de divisões de latitude e longitude
+        N = 5
+        latitude = np.linspace(0, np.pi, N)
+        longitude = np.linspace(0, 2 * np.pi, N,endpoint=False)
+
+        # Lista de pontos
+        Points = []
+        # Polo norte (y é o eixo vertical)
+        Points.extend([0, radius, 0])
+        for i in range(1, N - 1):
+            for j in range(N):
+                theta = latitude[i]
+                phi = longitude[j]
+                x = radius * np.sin(theta) * np.cos(phi)
+                z = radius * np.sin(theta) * np.sin(phi)
+                y = radius * np.cos(theta)
+                Points.extend([x, y, z])
+        Points.extend([0, -radius, 0])  # Polo sul
+
+        # Coordenadas dos vértices
+        coordIndex = []
+        start_idx = 1
+        polo_norte_idx = 0
+        polo_sul_idx = len(Points) // 3 - 1
+
+        # Conecta o polo norte
+        for i in range(N):
+            next_i = (i + 1) % N
+            coordIndex.extend([polo_norte_idx, start_idx + i, start_idx + next_i, -1])
+
+        # Conecta as latitudes e longitudes de cima para baixo
+        num_rings = N - 2 
+        for i in range(num_rings - 1):
+            for j in range(N):
+                next_j = (j + 1) % N
+                top_left = start_idx + i * N + j
+                top_right = start_idx + i * N + next_j
+                bottom_left = start_idx + (i + 1) * N + j
+                bottom_right = start_idx + (i + 1) * N + next_j
+
+                # Cria Face
+                coordIndex.extend([top_left, bottom_left, bottom_right, top_right, -1])
+
+        # Conecta o polo sul
+        last_ring_start_idx = start_idx + (num_rings - 1) * N
+        for i in range(N):
+            next_i = (i + 1) % N
+            coordIndex.extend([last_ring_start_idx + i, polo_sul_idx, last_ring_start_idx + next_i, -1])
+        
+        GL.indexedFaceSet(Points, coordIndex, False, None, None, None, None, colors, None)
 
     @staticmethod
     def cone(bottomRadius, height, colors):
@@ -818,26 +902,86 @@ class GL:
         # Para desenha esse cone você vai precisar tesselar ele em triângulos, para isso
         # encontre os vértices e defina os triângulos.
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cone : bottomRadius = {0}".format(bottomRadius)) # imprime no terminal o raio da base do cone
-        print("Cone : height = {0}".format(height)) # imprime no terminal a altura do cone
-        print("Cone : colors = {0}".format(colors)) # imprime no terminal as cores
+        
+        # Apex of the cone
+        apex = [0, height/2, 0]
+        #Pontos
+        Points = []
+        Points.extend(apex)
+        #Pontos da base
+        N = 20
+        #Lista thetas
+        base = np.linspace(0, 2 * np.pi, N,endpoint=False)
+        #Cria os pontos da base
+        for theta in base:
+            x = bottomRadius * np.cos(theta)
+            z = bottomRadius * np.sin(theta)
+            Points.extend([x, -height/2, z])
+        #Centro da base
+        Points.extend([0, -height/2, 0])
+        #Lista de Indices
+        coordIndex = []
+        #Tessela o Apex com a base
+        for i in range(N):
+            next_idx = (i + 1) % N
+            coordIndex.extend([0, i + 1, next_idx + 1, -1])
+
+        # Cria a face da base
+        base_face_indices = [i + 1 for i in range(N - 1, -1, -1)]
+        coordIndex.extend(base_face_indices + [-1])
+        #Desenha o cone
+        GL.indexedFaceSet(Points, coordIndex, False, None, None, None, None, colors, None)
 
     @staticmethod
     def cylinder(radius, height, colors):
-        """Função usada para renderizar Cilindros."""
-        # https://www.web3d.org/specifications/X3Dv4/ISO-IEC19775-1v4-IS/Part01/components/geometry3D.html#Cylinder
-        # A função cylinder é usada para desenhar cilindros na cena. O cilindro é centrado no
-        # (0, 0, 0) no sistema de coordenadas local. O argumento radius especifica o
-        # raio da base do cilindro e o argumento height especifica a altura do cilindro.
-        # O cilindro é alinhado com o eixo Y local. O cilindro é fechado por padrão em ambas as extremidades.
-        # Para desenha esse cilindro você vai precisar tesselar ele em triângulos, para isso
-        # encontre os vértices e defina os triângulos.
+        """Function to render cylinders."""
+        # Cilindro centrado em (0, 0, 0) no sistema de coordenadas local com eixo vertical Y.
+        #Divide o cilindro em N segmentos ao redor do raio e M segmentos ao longo da altura.
+        N = 20  
+        M = 8
+        
+        #Lista Iterações	
+        theta_list = np.linspace(0, 2 * np.pi, N, endpoint=False)
+        y_list = np.linspace(-height / 2, height / 2, M)
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Cylinder : radius = {0}".format(radius)) # imprime no terminal o raio do cilindro
-        print("Cylinder : height = {0}".format(height)) # imprime no terminal a altura do cilindro
-        print("Cylinder : colors = {0}".format(colors)) # imprime no terminal as cores
+        # Lista Pontos
+        Points = []
+
+        # Cria os pontos do cilindro
+        for y in y_list:
+            for theta in theta_list:
+                x = radius * np.cos(theta)
+                z = radius * np.sin(theta)
+                Points.extend([x, y, z])  
+
+        #Lista de Indices
+        coordIndex = []
+
+        # Conecta os lados do cilindro
+        for i in range(M - 1):
+            for j in range(N):
+                #Pontos da Face
+                next_j = (j + 1) % N
+                current_idx = i * N + j
+                next_idx = i * N + next_j
+                upper_current_idx = (i + 1) * N + j
+                upper_next_idx = (i + 1) * N + next_j
+                #Organiza Face 
+                coordIndex.extend([current_idx, next_idx, upper_current_idx, -1])
+                coordIndex.extend([upper_current_idx, next_idx, upper_next_idx, -1])
+
+        # Cria a face da base inferior (em Y = -height/2)
+        base_face_indices = [i for i in range(N - 1, -1, -1)]
+        coordIndex.extend(base_face_indices + [-1])
+
+        # Cria a face da base inferior (em Y = -height/2)
+        comeco_base_superior = (M - 1) * N
+        fim_base_superior = M*N
+        base_face_indices = [i for i in range(comeco_base_superior, fim_base_superior)]
+        coordIndex.extend(base_face_indices + [-1])
+
+        GL.indexedFaceSet(Points, coordIndex, False, None, None, None, None, colors, None)
+
 
     @staticmethod
     def navigationInfo(headlight):
