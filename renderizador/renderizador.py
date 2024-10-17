@@ -161,7 +161,7 @@ class Renderizador:
     def render(self):
         """Laço principal de renderização."""
         self.pre()  # executa rotina pré renderização
-        self.scene.render()  # faz o traversal no grafo de cena
+        self.scene.render()  # faz o traversal no grafo de cena e rendering
         self.pos()  # executa rotina pós renderização
         gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
         return gpu.GPU.get_frame_buffer()
