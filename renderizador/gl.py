@@ -6,7 +6,7 @@
 """
 Biblioteca Gráfica / Graphics Library.
 
-Desenvolvido por: <SEU NOME AQUI>
+Desenvolvido por: Pedro Paulo Moreno Camargo
 Disciplina: Computação Gráfica
 Data: <DATA DE INÍCIO DA IMPLEMENTAÇÃO>
 """
@@ -29,7 +29,8 @@ class GL:
     forward_direction = np.array([0,0,1])
     transform = [np.identity(4)]
     mipmaps = []
-    directional = None
+    directional_light = None
+    view_direction = None
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
@@ -166,15 +167,53 @@ class GL:
     @staticmethod
     def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None,tex_coords = None,texture = None,normal = None):
         # Cor emissiva ou difusa (default)
-        emissiveColor = colors.get('emissiveColor')
-        diffuseColor = colors.get('diffuseColor')
-        transparency = colors.get('transparency')
-        
-        
-        if emissiveColor == [0, 0, 0]:
-            default_rgb = [int(diffuseColor[0] * 255), int(diffuseColor[1] * 255), int(diffuseColor[2] * 255)]
+        emissiveColor = np.array(colors.get('emissiveColor', [0.0, 0.0, 0.0])) 
+        diffuseColor = np.array(colors.get('diffuseColor', [0.0, 0.0, 0.0]))  
+        specularColor = np.array(colors.get('specularColor', [0.0, 0.0, 0.0]))  
+        shininess = colors.get('shininess', 0) 
+        material_ambientIntensity = colors.get('ambientIntensity', 0.0)
+        transparency = colors.get('transparency', 0.0)
+        if normal is not None and GL.directional_light is not None:  
+            view_direction = np.array(GL.view_direction)  
+            if len(GL.directional_light) == 0:
+                light_direction = view_direction
+                light_intensity = 1.0  
+                light_color = np.array([1.0, 1.0, 1,0])  
+                light_amibient_intensity = 0.0
+            else:
+                if len(GL.directional_light) == 3:
+                    light_direction = view_direction    
+                else:
+                    light_direction = np.array(GL.directional_light[3])  
+                light_intensity = GL.directional_light[2] 
+                light_color = np.array(GL.directional_light[1]) 
+                light_amibient_intensity = GL.directional_light[0]
+
+
+            # Ambient lighting contribution
+            ambientI = light_amibient_intensity * diffuseColor * material_ambientIntensity   
+            
+            diffuse_factor = max(np.dot(normal, light_direction), 0.0)
+            # Diffuse lighting contribution (Lambertian reflection)
+            diffuseI = light_intensity * diffuseColor * diffuse_factor
+            halfway = light_direction + view_direction
+            halfway_norm = np.linalg.norm(halfway)
+            if halfway_norm != 0:
+                halfway = halfway / halfway_norm
+            NdotH = max(np.dot(normal, halfway), 0.0)
+            specular_factor = (NdotH ** (shininess * 128)) 
+
+            # Final specular intensity
+            specularI = specularColor * light_intensity * specular_factor
+            final_color = (ambientI + diffuseI + specularI) * light_color + emissiveColor
+            final_color = np.abs(final_color * 255)  
+            default_rgb = np.clip(final_color, 0, 255)
+
         else:
-            default_rgb = [int(emissiveColor[0] * 255), int(emissiveColor[1] * 255), int(emissiveColor[2] * 255)]
+            if emissiveColor[0] == 0 and emissiveColor[1] == 0 and emissiveColor[2] == 0:
+                default_rgb = [int(diffuseColor[0] * 255), int(diffuseColor[1] * 255), int(diffuseColor[2] * 255)]
+            else:
+                default_rgb = [int(emissiveColor[0] * 255), int(emissiveColor[1] * 255), int(emissiveColor[2] * 255)]
         
         def sign(x, y, p0, p1):
             x0, y0 = p0
@@ -474,8 +513,15 @@ class GL:
             v1 = p1_look_at - p0_look_at
             v2 = p2_look_at - p0_look_at
             normal = np.cross(v1, v2)
-            normal = normal / np.linalg.norm(normal) 
-
+            norm_value = np.linalg.norm(normal)
+            if norm_value != 0:
+                normal = normal / norm_value
+            else:
+                # Handle the case where the normal is a zero vector
+                normal = np.zeros_like(normal) 
+            camera_forward = np.array([GL.view_matrix[0][2], GL.view_matrix[1][2], GL.view_matrix[2][2]])  
+            camera_forward = camera_forward / np.linalg.norm(camera_forward)
+            GL.view_direction = camera_forward
             Z = [vertices_look_at[2][0],vertices_look_at[2][1],vertices_look_at[2][2]]
             # Aplica a matriz de projeção nos vértices
             vertices_NDC = np.matmul(GL.P, vertices_look_at)
@@ -845,7 +891,7 @@ class GL:
         # O eixo Y é o eixo vertical (up axis).
 
         # Número de divisões de latitude e longitude
-        N = 5
+        N = 100
         latitude = np.linspace(0, np.pi, N)
         longitude = np.linspace(0, 2 * np.pi, N,endpoint=False)
 
@@ -913,7 +959,7 @@ class GL:
         Points = []
         Points.extend(apex)
         #Pontos da base
-        N = 20
+        N = 100
         #Lista thetas
         base = np.linspace(0, 2 * np.pi, N,endpoint=False)
         #Cria os pontos da base
@@ -941,8 +987,8 @@ class GL:
         """Function to render cylinders."""
         # Cilindro centrado em (0, 0, 0) no sistema de coordenadas local com eixo vertical Y.
         #Divide o cilindro em N segmentos ao redor do raio e M segmentos ao longo da altura.
-        N = 20  
-        M = 8
+        N = 100
+        M = 100
         
         #Lista Iterações	
         theta_list = np.linspace(0, 2 * np.pi, N, endpoint=False)
@@ -995,8 +1041,8 @@ class GL:
         # A luz headlight deve ser direcional, ter intensidade = 1, cor = (1 1 1),
         # ambientIntensity = 0,0 e direção = (0 0 −1).
 
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("NavigationInfo : headlight = {0}".format(headlight)) # imprime no terminal
+        if headlight:
+            GL.directional_light = [0.0, [1, 1, 1], 1]
 
     @staticmethod
     def directionalLight(ambientIntensity, color, intensity, direction):
@@ -1006,11 +1052,7 @@ class GL:
         # cor, intensidade. O campo de direção especifica o vetor de direção da iluminação
         # que emana da fonte de luz no sistema de coordenadas local. A luz é emitida ao
         # longo de raios paralelos de uma distância infinita.
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("DirectionalLight : ambientIntensity = {0}".format(ambientIntensity))
-        print("DirectionalLight : color = {0}".format(color)) # imprime no terminal
-        print("DirectionalLight : intensity = {0}".format(intensity)) # imprime no terminal
-        print("DirectionalLight : direction = {0}".format(direction)) # imprime no terminal
+        GL.directional_light = [ambientIntensity, color, intensity, direction]
 
     @staticmethod
     def pointLight(ambientIntensity, color, intensity, location):
