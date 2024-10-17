@@ -29,6 +29,7 @@ class GL:
     forward_direction = np.array([0,0,1])
     transform = [np.identity(4)]
     mipmaps = []
+    directional = None
     @staticmethod
     def setup(width, height, near=0.01, far=1000):
         """Definr parametros para câmera de razão de aspecto, plano próximo e distante."""
@@ -163,7 +164,7 @@ class GL:
             draw_circle_points(0, 0, x, y, rgb)
 
     @staticmethod
-    def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None,tex_coords = None,texture = None):
+    def triangleSet2D(vertices, colors, color_vertices=[1,1,1], color_per_vertex=False, Z=None,tex_coords = None,texture = None,normal = None):
         # Cor emissiva ou difusa (default)
         emissiveColor = colors.get('emissiveColor')
         diffuseColor = colors.get('diffuseColor')
@@ -466,6 +467,15 @@ class GL:
             # Aplica a matriz de visão nos vértices
             vertices_look_at = np.matmul(GL.view_matrix, vertices)
 
+            p0_look_at = vertices_look_at[:3, 0]  # Extract the first three coordinates (x, y, z)
+            p1_look_at = vertices_look_at[:3, 1]
+            p2_look_at = vertices_look_at[:3, 2]
+            #Calcula a normal dos vertices do triangulo
+            v1 = p1_look_at - p0_look_at
+            v2 = p2_look_at - p0_look_at
+            normal = np.cross(v1, v2)
+            normal = normal / np.linalg.norm(normal) 
+
             Z = [vertices_look_at[2][0],vertices_look_at[2][1],vertices_look_at[2][2]]
             # Aplica a matriz de projeção nos vértices
             vertices_NDC = np.matmul(GL.P, vertices_look_at)
@@ -495,7 +505,7 @@ class GL:
             pontos = np.array([vertices_finais[0][0], vertices_finais[1][0],
                         vertices_finais[0][1], vertices_finais[1][1],
                         vertices_finais[0][2], vertices_finais[1][2]])
-            GL.triangleSet2D(pontos, colors, color_vertices, color_per_vertex,Z,text_coords,texture)
+            GL.triangleSet2D(pontos, colors, color_vertices, color_per_vertex,Z,text_coords,texture,normal)
 
     @staticmethod
     def viewpoint(position, orientation, fieldOfView):
@@ -736,7 +746,7 @@ class GL:
             coordinate_x, -coordinate_y, -coordinate_z
 
         ]
-
+        #Tessela a caixa
         coordIndex = [
             #Face1
             0,1,2,3,-1,
@@ -751,12 +761,6 @@ class GL:
             #Face6
             4,7,6,5,-1
         ]
-
-        #Desenha a caixa por strip
-        
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("Box : size = {0}".format(size)) # imprime no terminal pontos
-        print("Box : colors = {0}".format(colors)) # imprime no terminal as cores
 
         GL.indexedFaceSet(points, coordIndex, False, None, None, None, None, colors, None)
 
@@ -834,7 +838,7 @@ class GL:
             else:
                 #Adiciona os parametros da face atual
                 current_face.append((coord[index * 3: index * 3 + 3], colorIndex[index] if colorPerVertex else 0, texCoordIndex[index] if texCoord else 0))
-
+    @staticmethod
     def sphere(radius, colors):
         """Função usada para renderizar Esferas."""
         # A esfera é centrada no (0, 0, 0) no sistema de coordenadas local.
@@ -957,7 +961,7 @@ class GL:
         #Lista de Indices
         coordIndex = []
 
-        # Conecta os lados do cilindro
+        # Tessela o lado do cilindro
         for i in range(M - 1):
             for j in range(N):
                 #Pontos da Face
@@ -967,14 +971,13 @@ class GL:
                 upper_current_idx = (i + 1) * N + j
                 upper_next_idx = (i + 1) * N + next_j
                 #Organiza Face 
-                coordIndex.extend([current_idx, next_idx, upper_current_idx, -1])
-                coordIndex.extend([upper_current_idx, next_idx, upper_next_idx, -1])
+                coordIndex.extend([upper_current_idx, current_idx, next_idx, upper_next_idx , -1])
 
-        # Cria a face da base inferior (em Y = -height/2)
+        # Tessela a base inferior (em Y = -height/2)
         base_face_indices = [i for i in range(N - 1, -1, -1)]
         coordIndex.extend(base_face_indices + [-1])
 
-        # Cria a face da base inferior (em Y = -height/2)
+        # Tessela a base superior (em Y = -height/2)
         comeco_base_superior = (M - 1) * N
         fim_base_superior = M*N
         base_face_indices = [i for i in range(comeco_base_superior, fim_base_superior)]
@@ -1003,7 +1006,6 @@ class GL:
         # cor, intensidade. O campo de direção especifica o vetor de direção da iluminação
         # que emana da fonte de luz no sistema de coordenadas local. A luz é emitida ao
         # longo de raios paralelos de uma distância infinita.
-
         # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
         print("DirectionalLight : ambientIntensity = {0}".format(ambientIntensity))
         print("DirectionalLight : color = {0}".format(color)) # imprime no terminal
