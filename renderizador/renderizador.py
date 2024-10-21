@@ -35,40 +35,59 @@ class Renderizador:
         self.image_file = "tela.png"
         self.scene = None
         self.framebuffers = {}
-        self.ss_factor = 2
+        self.ss_factor = 1
         
         
 
     def setup(self):
         """Configura o sistema para a renderização."""
         # Gera 2 framebuffers: um para a renderização final e outro para supersampling
-        fbos = gpu.GPU.gen_framebuffers(2)  
-        # Cria framebuffer tamanho original
-        self.framebuffers["FRONT"] = fbos[0]
-        gpu.GPU.framebuffer_storage(
-            self.framebuffers["FRONT"],
-            gpu.GPU.COLOR_ATTACHMENT,
-            gpu.GPU.RGB8,
-            self.width,
-            self.height
-        )
+        if self.ss_factor < 2:
+            fbos = gpu.GPU.gen_framebuffers(1)  
+            # Cria framebuffer tamanho original
+            self.framebuffers["FRONT"] = fbos[0]
+            gpu.GPU.framebuffer_storage(
+                self.framebuffers["FRONT"],
+                gpu.GPU.COLOR_ATTACHMENT,
+                gpu.GPU.RGB8,
+                self.width,
+                self.height
+            )
+            gpu.GPU.framebuffer_storage(
+                self.framebuffers["FRONT"],
+                gpu.GPU.DEPTH_ATTACHMENT,
+                gpu.GPU.DEPTH_COMPONENT32F,
+                self.width* self.ss_factor,
+                self.height* self.ss_factor
+            )
+        else:
+            fbos = gpu.GPU.gen_framebuffers(2)  
+            # Cria framebuffer tamanho original
+            self.framebuffers["FRONT"] = fbos[0]
+            gpu.GPU.framebuffer_storage(
+                self.framebuffers["FRONT"],
+                gpu.GPU.COLOR_ATTACHMENT,
+                gpu.GPU.RGB8,
+                self.width,
+                self.height
+            )
 
-        #   Cria framebuffer para supersampling
-        self.framebuffers["SS"] = fbos[1]
-        gpu.GPU.framebuffer_storage(
-            self.framebuffers["SS"],
-            gpu.GPU.COLOR_ATTACHMENT,
-            gpu.GPU.RGB8,
-            self.width * self.ss_factor,
-            self.height * self.ss_factor
-        )
-        gpu.GPU.framebuffer_storage(
-            self.framebuffers["SS"],
-            gpu.GPU.DEPTH_ATTACHMENT,
-            gpu.GPU.DEPTH_COMPONENT32F,
-            self.width* self.ss_factor,
-            self.height* self.ss_factor
-        )
+            #   Cria framebuffer para supersampling
+            self.framebuffers["SS"] = fbos[1]
+            gpu.GPU.framebuffer_storage(
+                self.framebuffers["SS"],
+                gpu.GPU.COLOR_ATTACHMENT,
+                gpu.GPU.RGB8,
+                self.width * self.ss_factor,
+                self.height * self.ss_factor
+            )
+            gpu.GPU.framebuffer_storage(
+                self.framebuffers["SS"],
+                gpu.GPU.DEPTH_ATTACHMENT,
+                gpu.GPU.DEPTH_COMPONENT32F,
+                self.width* self.ss_factor,
+                self.height* self.ss_factor
+            )
         # Define cor que ira apagar o FrameBuffer quando clear_buffer() invocado
         gpu.GPU.clear_color([0, 0, 0])
 
@@ -81,7 +100,9 @@ class Renderizador:
     def pre(self):
         """Rotinas pré renderização."""
         # Função invocada antes do processo de renderização iniciar.
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
+        if self.ss_factor > 1:
+            # Binda o framebuffer de supersampling
+            gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["SS"])
 
         # Limpa o frame buffers atual
         gpu.GPU.clear_buffer()
@@ -92,44 +113,45 @@ class Renderizador:
 
     def pos(self):
         """Post-rendering routine: downsample SS to FRONT and push FRONT to screen."""
-        # Criar uma imagem final e um buffer de profundidade final
-        final_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        if self.ss_factor >1:
+            # Criar uma imagem final e um buffer de profundidade final
+            final_image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
 
-        # Downsample do SS para as imagens
-        for y in range(self.height):
-            for x in range(self.width):
-                r, g, b = 0, 0, 0
-                count = 0
-                # Itera os pixels a serem downsampled
-                for sy in range(self.ss_factor):
-                    for sx in range(self.ss_factor):
-                        # Calcula o pixel a ser lido
-                        ix = x * self.ss_factor + sx
-                        iy = y * self.ss_factor + sy
+            # Downsample do SS para as imagens
+            for y in range(self.height):
+                for x in range(self.width):
+                    r, g, b = 0, 0, 0
+                    count = 0
+                    # Itera os pixels a serem downsampled
+                    for sy in range(self.ss_factor):
+                        for sx in range(self.ss_factor):
+                            # Calcula o pixel a ser lido
+                            ix = x * self.ss_factor + sx
+                            iy = y * self.ss_factor + sy
 
-                        # Le a cor
-                        pixel_color = gpu.GPU.read_pixel([ix, iy], gpu.GPU.RGB8)
+                            # Le a cor
+                            pixel_color = gpu.GPU.read_pixel([ix, iy], gpu.GPU.RGB8)
 
-                        # Soma as cores
-                        r += pixel_color[0]
-                        g += pixel_color[1]
-                        b += pixel_color[2]
-                        count += 1
+                            # Soma as cores
+                            r += pixel_color[0]
+                            g += pixel_color[1]
+                            b += pixel_color[2]
+                            count += 1
 
-                # Pega a média das cores
-                final_image[y, x, 0] = r // count
-                final_image[y, x, 1] = g // count
-                final_image[y, x, 2] = b // count
+                    # Pega a média das cores
+                    final_image[y, x, 0] = r // count
+                    final_image[y, x, 1] = g // count
+                    final_image[y, x, 2] = b // count
 
-        # Binda o framebuffer final
-        gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
-        gpu.GPU.clear_buffer()
+            # Binda o framebuffer final
+            gpu.GPU.bind_framebuffer(gpu.GPU.FRAMEBUFFER, self.framebuffers["FRONT"])
+            gpu.GPU.clear_buffer()
 
-        # Itera sobre a imagem final e escreve no framebuffer final
-        for y in range(self.height):
-            for x in range(self.width):
-                gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, final_image[y, x].tolist())
+            # Itera sobre a imagem final e escreve no framebuffer final
+            for y in range(self.height):
+                for x in range(self.width):
+                    gpu.GPU.draw_pixel([x, y], gpu.GPU.RGB8, final_image[y, x].tolist())
 
 
     def mapping(self):

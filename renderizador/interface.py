@@ -211,7 +211,7 @@ class Interface:
             image.set_array(data)
 
             # Calcula e atualiza a quantidade de Quadros Por Segundo
-            fps = "{:.1f}".format(1/(time.process_time() - Interface.last_time))
+            fps = "{:.1f}".format(1 / max((time.process_time() - Interface.last_time), 1))
             time_box.set_val(fps)
             time_box.cursor_index = len(fps)
             Interface.last_time = time.process_time()

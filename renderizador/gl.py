@@ -179,23 +179,25 @@ class GL:
                 light_direction = view_direction
                 light_intensity = 1.0  
                 light_color = np.array([1.0, 1.0, 1,0])  
-                light_amibient_intensity = 0.0
+                light_ambient_intensity = 1.0
             else:
                 if len(GL.directional_light) == 3:
-                    light_direction = view_direction    
+                    light_direction = [0,0,1]  
                 else:
-                    light_direction = np.array(GL.directional_light[3])  
+                    light_direction = -np.array(GL.directional_light[3])  
                 light_intensity = GL.directional_light[2] 
                 light_color = np.array(GL.directional_light[1]) 
-                light_amibient_intensity = GL.directional_light[0]
-
-
+                light_ambient_intensity = GL.directional_light[0]
+ 
+            normal = normal
             # Ambient lighting contribution
-            ambientI = light_amibient_intensity * diffuseColor * material_ambientIntensity   
-            
+            ambientI = light_ambient_intensity * diffuseColor * 1
+
             diffuse_factor = max(np.dot(normal, light_direction), 0.0)
             # Diffuse lighting contribution (Lambertian reflection)
             diffuseI = light_intensity * diffuseColor * diffuse_factor
+
+
             halfway = light_direction + view_direction
             halfway_norm = np.linalg.norm(halfway)
             if halfway_norm != 0:
@@ -209,6 +211,7 @@ class GL:
             final_color = np.abs(final_color * 255)  
             default_rgb = np.clip(final_color, 0, 255)
 
+    
         else:
             if emissiveColor[0] == 0 and emissiveColor[1] == 0 and emissiveColor[2] == 0:
                 default_rgb = [int(diffuseColor[0] * 255), int(diffuseColor[1] * 255), int(diffuseColor[2] * 255)]
@@ -519,8 +522,8 @@ class GL:
             else:
                 # Handle the case where the normal is a zero vector
                 normal = np.zeros_like(normal) 
-            camera_forward = np.array([GL.view_matrix[0][2], GL.view_matrix[1][2], GL.view_matrix[2][2]])  
-            camera_forward = camera_forward / np.linalg.norm(camera_forward)
+            camera_forward = np.array([0, 0, 1])
+
             GL.view_direction = camera_forward
             Z = [vertices_look_at[2][0],vertices_look_at[2][1],vertices_look_at[2][2]]
             # Aplica a matriz de projeção nos vértices
@@ -681,7 +684,7 @@ class GL:
         GL.transform.pop()
 
     @staticmethod
-    def triangleStripSet(point, stripCount, colors):
+    def triangleStripSet(point, stripCount, colors, color_vertices = None, color_per_vertex = False, tex_coords = None, texture = None):
         """Função usada para renderizar TriangleStripSet."""
         # A função triangleStripSet é usada para desenhar tiras de triângulos interconectados.
         # O parâmetro 'point' contém uma lista de coordenadas x, y e z dos vértices.
@@ -699,10 +702,10 @@ class GL:
 
                 if x % 2 == 0:
                     # Se a orientação estiver correta, desenha o triângulo
-                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors)
+                    GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors, color_vertices, color_per_vertex, tex_coords, texture)
                 else:
                     # Se a orientação estiver invertida, troca a ordem dos vértices
-                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors)
+                    GL.triangleSet([p0[0], p0[1], p0[2], p2[0], p2[1], p2[2], p1[0], p1[1], p1[2]], colors, color_vertices, color_per_vertex, tex_coords, texture)
 
                 # Avança para o próximo ponto
                 index += 1
@@ -727,7 +730,7 @@ class GL:
             
                 
     @staticmethod
-    def indexedTriangleStripSet(point, index, colors):
+    def indexedTriangleStripSet(point, index, colors, color_vertices = None, color_per_vertex = False, tex_coords = None, texture = None):
         """Função usada para renderizar IndexedTriangleStripSet."""
         # A função indexedTriangleStripSet é usada para desenhar tiras de triângulos
         # interconectados, você receberá as coordenadas dos pontos no parâmetro point, esses
@@ -747,7 +750,7 @@ class GL:
             if i == -1:
                 # Quando encontramos -1, processamos a tira atual se ela tiver pelo menos 3 vértices
                 if len(current_strip)//3 >= 3:
-                    GL.triangleStripSet(current_strip, [len(current_strip)//3], colors)
+                    GL.triangleStripSet(current_strip, [len(current_strip)//3], colors,color_vertices, color_per_vertex, tex_coords, texture)
 
                 # Limpar a lista atual para a próxima tira
                 current_strip = []
@@ -759,7 +762,7 @@ class GL:
 
 
     @staticmethod
-    def box(size, colors):
+    def box(size, colors,texture = None):
         """Função usada para renderizar Boxes."""
         # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
         # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
@@ -807,7 +810,7 @@ class GL:
             #Face6
             4,7,6,5,-1
         ]
-
+        print(colors)
         GL.indexedFaceSet(points, coordIndex, False, None, None, None, None, colors, None)
 
     def generate_mipmaps(texture):
@@ -824,122 +827,182 @@ class GL:
     
     @staticmethod
     def indexedFaceSet(coord, coordIndex, colorPerVertex, color, colorIndex,
-                       texCoord, texCoordIndex, colors, current_texture):
-        """Função usada para renderizar IndexedFaceSet."""
-        # A função indexedFaceSet é usada para desenhar malhas de triângulos. Ela funciona de
-        # forma muito simular a IndexedTriangleStripSet porém com mais recursos.
-        # Você receberá as coordenadas dos pontos no parâmetro cord, esses
-        # pontos são uma lista de pontos x, y, e z sempre na ordem. Assim coord[0] é o valor
-        # da coordenada x do primeiro ponto, coord[1] o valor y do primeiro ponto, coord[2]
-        # o valor z da coordenada z do primeiro ponto. Já coord[3] é a coordenada x do
-        # segundo ponto e assim por diante. No IndexedFaceSet uma lista de vértices é informada
-        # em coordIndex, o valor -1 indica que a lista acabou.
-        # A ordem de conexão não possui uma ordem oficial, mas em geral se o primeiro ponto com os dois
-        # seguintes e depois este mesmo primeiro ponto com o terçeiro e quarto ponto. Por exemplo: numa
-        # sequencia 0, 1, 2, 3, 4, -1 o primeiro triângulo será com os vértices 0, 1 e 2, depois serão
-        # os vértices 0, 2 e 3, e depois 0, 3 e 4, e assim por diante, até chegar no final da lista.
-        # Adicionalmente essa implementação do IndexedFace aceita cores por vértices, assim
-        # se a flag colorPerVertex estiver habilitada, os vértices também possuirão cores
-        # que servem para definir a cor interna dos poligonos, para isso faça um cálculo
-        # baricêntrico de que cor deverá ter aquela posição. Da mesma forma se pode definir uma
-        # textura para o poligono, para isso, use as coordenadas de textura e depois aplique a
-        # cor da textura conforme a posição do mapeamento. Dentro da classe GPU já está
-        # implementadado um método para a leitura de imagens.
-
-        #Cria as condições iniciais para o código não crashar
-        current_face = [] 
+                    texCoord, texCoordIndex, colors, current_texture):
+        """Função usada para renderizar IndexedFaceSet com triangulação."""
         image = None
+
         if not colorPerVertex:
             color = [1, 1, 1]
+
         if colorPerVertex:
             if not color or not colorIndex:
                 colorPerVertex = False
                 color = [1, 1, 1]
+
         if current_texture:
             image = gpu.GPU.load_texture(current_texture[0])
             GL.mipmaps = GL.generate_mipmaps(image)
             if not texCoordIndex:
                 texCoordIndex = coordIndex
 
+        current_face_indices = []
+        faces = []
 
+        # Coleta as faces a partir de coordIndex
         for index in coordIndex:
             if index == -1:
-                #Processa a face atual
-                if len(current_face) >= 3:
-                    for x in range(1, len(current_face) - 1):
-                        p0, c0, t0 = current_face[0]
-                        p1, c1, t1 = current_face[x]
-                        p2, c2, t2 = current_face[x + 1]
-
-                        color0 = [color[c0 * 3], color[c0 * 3 + 1], color[c0 * 3 + 2]]
-                        color1 = [color[c1 * 3], color[c1 * 3 + 1], color[c1 * 3 + 2]]
-                        color2 = [color[c2 * 3], color[c2 * 3 + 1], color[c2 * 3 + 2]]
-
-                        uv0 = (texCoord[t0 * 2], texCoord[t0 * 2 + 1]) if texCoord else (0, 0)
-                        uv1 = (texCoord[t1 * 2], texCoord[t1 * 2 + 1]) if texCoord else (0, 0)
-                        uv2 = (texCoord[t2 * 2], texCoord[t2 * 2 + 1]) if texCoord else (0, 0)
-                        color_vertices = [color0, color1, color2]
-                        GL.triangleSet([p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]], colors, color_vertices, colorPerVertex, [uv0, uv1, uv2], image)
-                current_face = []
+                if len(current_face_indices) >= 3:
+                    # Armazena a face atual para processamento posterior
+                    faces.append(current_face_indices.copy())
+                current_face_indices.clear()
             else:
-                #Adiciona os parametros da face atual
-                current_face.append((coord[index * 3: index * 3 + 3], colorIndex[index] if colorPerVertex else 0, texCoordIndex[index] if texCoord else 0))
+                current_face_indices.append(index)
+
+        # Processa quaisquer índices restantes após o loop
+        if len(current_face_indices) >= 3:
+            faces.append(current_face_indices.copy())
+
+        # Para cada face, triangula e renderiza
+        for face_indices in faces:
+            # Triangula a face usando um triângulo fan
+            for i in range(1, len(face_indices) - 1):
+                idx0 = face_indices[0]
+                idx1 = face_indices[i]
+                idx2 = face_indices[i + 1]
+
+                # Coordenadas dos pontos
+                p0 = coord[idx0 * 3: idx0 * 3 + 3]
+                p1 = coord[idx1 * 3: idx1 * 3 + 3]
+                p2 = coord[idx2 * 3: idx2 * 3 + 3]
+                triangle_points = p0 + p1 + p2
+
+                # Cores por vértice
+                triangle_colors = None
+                if colorPerVertex and color and colorIndex:
+                    c0_idx = colorIndex[idx0] * 3
+                    c1_idx = colorIndex[idx1] * 3
+                    c2_idx = colorIndex[idx2] * 3
+                    c0 = [color[c0_idx], color[c0_idx + 1], color[c0_idx + 2]]
+                    c1 = [color[c1_idx], color[c1_idx + 1], color[c1_idx + 2]]
+                    c2 = [color[c2_idx], color[c2_idx + 1], color[c2_idx + 2]]
+                    triangle_colors = [c0, c1, c2]
+
+                # Coordenadas de textura
+                triangle_tex_coords = None
+                if texCoord and texCoordIndex:
+                    t0_idx = texCoordIndex[idx0] * 2
+                    t1_idx = texCoordIndex[idx1] * 2
+                    t2_idx = texCoordIndex[idx2] * 2
+                    t0 = (texCoord[t0_idx], texCoord[t0_idx + 1])
+                    t1 = (texCoord[t1_idx], texCoord[t1_idx + 1])
+                    t2 = (texCoord[t2_idx], texCoord[t2_idx + 1])
+                    triangle_tex_coords = [t0, t1, t2]
+
+                # Chama triangleSet para renderizar o triângulo atual
+                GL.triangleSet(triangle_points, colors, triangle_colors, colorPerVertex,
+                            triangle_tex_coords, image)
+
+
+
+    
     @staticmethod
-    def sphere(radius, colors):
-        """Função usada para renderizar Esferas."""
-        # A esfera é centrada no (0, 0, 0) no sistema de coordenadas local.
-        # O eixo Y é o eixo vertical (up axis).
+    def sphere(radius, colors, subdivisions=1):
+        # Generate initial icosahedron
+        t = (1.0 + np.sqrt(5.0)) / 2.0
 
-        # Número de divisões de latitude e longitude
-        N = 100
-        latitude = np.linspace(0, np.pi, N)
-        longitude = np.linspace(0, 2 * np.pi, N,endpoint=False)
+        # Initial vertices of an icosahedron
+        initial_vertices = [
+            [-1,  t,  0],
+            [ 1,  t,  0],
+            [-1, -t,  0],
+            [ 1, -t,  0],
+            [ 0, -1,  t],
+            [ 0,  1,  t],
+            [ 0, -1, -t],
+            [ 0,  1, -t],
+            [ t,  0, -1],
+            [ t,  0,  1],
+            [-t,  0, -1],
+            [-t,  0,  1],
+        ]
 
-        # Lista de pontos
+        # Normalize initial vertices to lie on the sphere
+        initial_vertices = [np.array(v) / np.linalg.norm(v) * radius for v in initial_vertices]
+
+        # Define the 20 faces of the icosahedron with consistent winding order (counter-clockwise)
+        initial_faces = [
+            [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7,10], [0,10,11],
+            [1,5,9], [5,11,4], [11,10,2], [10,7,6], [7,1,8],
+            [3,9,4], [3,4,2], [3,2,6], [3,6,8], [3,8,9],
+            [4,9,5], [2,4,11], [6,2,10], [8,6,7], [9,8,1],
+        ]
+
+        # Create a dictionary to store middle point indices to avoid duplicates
+        middle_point_cache = {}
+
+        # Function to get a middle point between two vertices and normalize it to lie on the sphere
+        def get_middle_point(v1_idx, v2_idx):
+            # Order the indices to check for existing middle point
+            smaller_idx = min(v1_idx, v2_idx)
+            greater_idx = max(v1_idx, v2_idx)
+            key = (smaller_idx, greater_idx)
+
+            if key in middle_point_cache:
+                return middle_point_cache[key]
+
+            # Compute the middle point and normalize it
+            point1 = vertices[smaller_idx]
+            point2 = vertices[greater_idx]
+            middle = (point1 + point2) / 2.0
+            middle = middle / np.linalg.norm(middle) * radius  # Normalize to lie on the sphere
+
+            vertices.append(middle)
+            index = len(vertices) - 1
+            middle_point_cache[key] = index
+
+            return index
+
+        # Start with initial vertices and faces
+        vertices = initial_vertices.copy()
+        faces = initial_faces.copy()
+
+        # Subdivide faces
+        for _ in range(subdivisions):
+            faces_subdivided = []
+            for tri in faces:
+                v1_idx, v2_idx, v3_idx = tri
+
+                # Get middle points for each edge of the triangle
+                a = get_middle_point(v1_idx, v2_idx)
+                b = get_middle_point(v2_idx, v3_idx)
+                c = get_middle_point(v3_idx, v1_idx)
+
+                # Create four new triangles with consistent winding order
+                faces_subdivided.append([v1_idx, a, c])
+                faces_subdivided.append([a, v2_idx, b])
+                faces_subdivided.append([b, v3_idx, c])
+                faces_subdivided.append([a, b, c])
+
+            faces = faces_subdivided
+
+        # Prepare the Points list
         Points = []
-        # Polo norte (y é o eixo vertical)
-        Points.extend([0, radius, 0])
-        for i in range(1, N - 1):
-            for j in range(N):
-                theta = latitude[i]
-                phi = longitude[j]
-                x = radius * np.sin(theta) * np.cos(phi)
-                z = radius * np.sin(theta) * np.sin(phi)
-                y = radius * np.cos(theta)
-                Points.extend([x, y, z])
-        Points.extend([0, -radius, 0])  # Polo sul
+        for v in vertices:
+            Points.extend(v.tolist())
 
-        # Coordenadas dos vértices
+        # Prepare the coordIndex list
         coordIndex = []
-        start_idx = 1
-        polo_norte_idx = 0
-        polo_sul_idx = len(Points) // 3 - 1
+        for face in faces:
+            coordIndex.extend(face + [-1])  # Add -1 to indicate the end of face
 
-        # Conecta o polo norte
-        for i in range(N):
-            next_i = (i + 1) % N
-            coordIndex.extend([polo_norte_idx, start_idx + i, start_idx + next_i, -1])
+        # Call the indexedFaceSet function to render the icosphere
+        GL.indexedFaceSet(
+            Points, coordIndex, False, None, None,
+            None, None, colors, None
+        )
 
-        # Conecta as latitudes e longitudes de cima para baixo
-        num_rings = N - 2 
-        for i in range(num_rings - 1):
-            for j in range(N):
-                next_j = (j + 1) % N
-                top_left = start_idx + i * N + j
-                top_right = start_idx + i * N + next_j
-                bottom_left = start_idx + (i + 1) * N + j
-                bottom_right = start_idx + (i + 1) * N + next_j
 
-                # Cria Face
-                coordIndex.extend([top_left, bottom_left, bottom_right, top_right, -1])
 
-        # Conecta o polo sul
-        last_ring_start_idx = start_idx + (num_rings - 1) * N
-        for i in range(N):
-            next_i = (i + 1) % N
-            coordIndex.extend([last_ring_start_idx + i, polo_sul_idx, last_ring_start_idx + next_i, -1])
-        
-        GL.indexedFaceSet(Points, coordIndex, False, None, None, None, None, colors, None)
 
     @staticmethod
     def cone(bottomRadius, height, colors):
@@ -1096,17 +1159,22 @@ class GL:
         # cycleInterval segundos. O valor de cycleInterval deve ser maior que zero.
 
         # Deve retornar a fração de tempo passada em fraction_changed
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("TimeSensor : cycleInterval = {0}".format(cycleInterval)) # imprime no terminal
-        print("TimeSensor : loop = {0}".format(loop))
-
+        
+        
+        gpu.GPU.clear_buffer()
         # Esse método já está implementado para os alunos como exemplo
         epoch = time.time()  # time in seconds since the epoch as a floating point number.
         fraction_changed = (epoch % cycleInterval) / cycleInterval
 
         return fraction_changed
 
+
+    hermite_matrix = np.array([
+        [2, -2, 1, 1],
+        [-3, 3, -2, -1],
+        [0, 0, 1, 0],
+        [1, 0, 0, 0]
+        ])
     @staticmethod
     def splinePositionInterpolator(set_fraction, key, keyValue, closed):
         """Interpola não linearmente entre uma lista de vetores 3D."""
@@ -1117,41 +1185,135 @@ class GL:
         # quadros-chave no key. O campo closed especifica se o interpolador deve tratar a malha
         # como fechada, com uma transições da última chave para a primeira chave. Se os keyValues
         # na primeira e na última chave não forem idênticos, o campo closed será ignorado.
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("SplinePositionInterpolator : set_fraction = {0}".format(set_fraction))
-        print("SplinePositionInterpolator : key = {0}".format(key)) # imprime no terminal
-        print("SplinePositionInterpolator : keyValue = {0}".format(keyValue))
-        print("SplinePositionInterpolator : closed = {0}".format(closed))
-
-        # Abaixo está só um exemplo de como os dados podem ser calculados e transferidos
-        value_changed = [0.0, 0.0, 0.0]
+        # Find the segment in which the interpolation occurs
+        #Encontra o segmento em que a interpolação ocorre
+        #Caso a fração seja menor que o primeiro valor
+        if set_fraction <= key[0]:
+            return keyValue[:3]
+        #Caso a fração seja maior que o último valor
+        elif set_fraction >= key[-1]:
+            return keyValue[-3:]
+        #Encontra o segmento em que a interpolação ocorre
+        index = np.searchsorted(key, set_fraction) - 1
+        #Calcula a fração de interpolação local ou seja porcentagem do segmento a ser interpolada
+        t = (set_fraction - key[index]) / (key[index + 1] - key[index])
         
-        return value_changed
+        p1 = np.array(keyValue[3 * index : 3 * index + 3])
+        p2 = np.array(keyValue[3 * (index + 1) : 3 * (index + 1) + 3])
+
+        #Calculo das tangentes
+        #Caso seja o primeiro ponto
+        if index == 0:
+            #Se for fechado p0 é o último ponto
+            if closed:
+                p0 = np.array(keyValue[-3:])
+            else:
+                #Se não for fechado p0 é o mesmo que p1
+                p0 = p1
+        #Caso não seja o primeiro ponto
+        else:
+            p0 = np.array(keyValue[3 * (index - 1) : 3 * (index - 1) + 3])
+        #Caso seja o último ponto
+        if index + 2 == len(key):
+            #Se for fechado p3 é o primeiro ponto
+            if closed:
+                p3 = np.array(keyValue[:3])
+            else:
+                #Se não for fechado p3 é o mesmo que p2
+                p3 = p2
+        #Caso não seja o último ponto
+        else:
+            p3 = np.array(keyValue[3 * (index + 2) : 3 * (index +2) + 3])
+        
+        #Calcula a interpolação cúbica de Hermite
+        h0 = p1
+        h1 = p2
+        h2 = (p2-p0)*0.5
+        h3 = (p3-p1)*0.5
+
+        T = np.array([t**3, t**2, t, 1])
+        H = np.array([h0, h1, h2, h3])
+        #Calcula o valor interpolado
+        value_changed = np.matmul(T, np.matmul(GL.hermite_matrix, H))
+        return value_changed.tolist()
+
 
     @staticmethod
     def orientationInterpolator(set_fraction, key, keyValue):
-        """Interpola entre uma lista de valores de rotação especificos."""
-        # Interpola rotações são absolutas no espaço do objeto e, portanto, não são cumulativas.
-        # Uma orientação representa a posição final de um objeto após a aplicação de uma rotação.
-        # Um OrientationInterpolator interpola entre duas orientações calculando o caminho mais
-        # curto na esfera unitária entre as duas orientações. A interpolação é linear em
-        # comprimento de arco ao longo deste caminho. Os resultados são indefinidos se as duas
-        # orientações forem diagonalmente opostas. O campo keyValue possui uma lista com os
-        # valores a serem interpolados, key possui uma lista respectiva de chaves
-        # dos valores em keyValue, a fração a ser interpolada vem de set_fraction que varia de
-        # zeroa a um. O campo keyValue deve conter exatamente tantas rotações 3D quanto os
-        # quadros-chave no key.
-
-        # O print abaixo é só para vocês verificarem o funcionamento, DEVE SER REMOVIDO.
-        print("OrientationInterpolator : set_fraction = {0}".format(set_fraction))
-        print("OrientationInterpolator : key = {0}".format(key)) # imprime no terminal
-        print("OrientationInterpolator : keyValue = {0}".format(keyValue))
-
-        # Abaixo está só um exemplo de como os dados podem ser calculados e transferidos
-        value_changed = [0, 0, 1, 0]
-
+        """Optimized interpolation of rotation values using slerp."""
+        
+        # Cria uma lista de rotações a partir dos valores de keyValue
+        rotations = np.reshape(keyValue, (-1, 4))
+        
+        # Checa condições de borda
+        if set_fraction <= key[0]:
+            return rotations[0].tolist()
+        elif set_fraction >= key[-1]:
+            return rotations[-1].tolist()
+        
+        # Acha o segmento em que a interpolação ocorre
+        i = np.searchsorted(key, set_fraction) - 1
+        
+        # Calcula a fração de interpolação local
+        t = (set_fraction - key[i]) / (key[i+1] - key[i])
+        
+        # Pega os valores de rotação (eixo e ângulo) para q0 e q1
+        axis0, angle0 = rotations[i, :3], rotations[i, 3]
+        axis1, angle1 = rotations[i+1, :3], rotations[i+1, 3]
+        
+        # Normaliza os eixos de q0 e q1
+        axis0_normalized = axis0 / np.linalg.norm(axis0) if np.linalg.norm(axis0) != 0 else axis0
+        axis1_normalized = axis1 / np.linalg.norm(axis1) if np.linalg.norm(axis1) != 0 else axis1
+        
+        # Converte os ângulos para meio-ângulo
+        half_angle0 = angle0 / 2
+        half_angle1 = angle1 / 2
+        
+        # Constrói q0 e q1 a partir dos valores normalizados e ângulos
+        q0 = np.hstack((np.cos(half_angle0), axis0_normalized * np.sin(half_angle0)))
+        q1 = np.hstack((np.cos(half_angle1), axis1_normalized * np.sin(half_angle1)))
+        
+        # Calcula o produto escalar entre q0 e q1
+        dot = np.dot(q0, q1)
+        
+        # Se o produto escalar for negativo, inverte q1 para pegar o caminho mais curto
+        if dot < 0.0:
+            q1 = -q1
+            dot = -dot
+        
+        # Usa clamp para garantir estabilidade
+        dot = np.clip(dot, -1.0, 1.0)
+        
+        # Calcula o ângulo entre q0 e q1
+        theta_0 = np.arccos(dot)
+        sin_theta_0 = np.sin(theta_0)
+        
+        # Aplica SLERP
+        if sin_theta_0 < 1e-6:
+            q_interp = (1.0 - t) * q0 + t * q1
+        else:
+            sin_theta = np.sin((1.0 - t) * theta_0)
+            sin_theta_t = np.sin(t * theta_0)
+            q_interp = (sin_theta / sin_theta_0) * q0 + (sin_theta_t / sin_theta_0) * q1
+        
+        # Normaliza o quaternion interpolado
+        q_interp /= np.linalg.norm(q_interp)
+        
+        # Converte o quaternion interpolado de volta para eixo e ângulo
+        w, x, y, z = q_interp
+        angle = 2.0 * np.arccos(w)
+        sin_half_angle = np.sqrt(1.0 - w * w)
+        
+        if sin_half_angle < 1e-6:
+            axis = np.array([1.0, 0.0, 0.0])  
+        else:
+            axis = np.array([x, y, z]) / sin_half_angle
+        
+        value_changed = [axis[0], axis[1], axis[2], angle]
         return value_changed
+
+
+
 
     # Para o futuro (Não para versão atual do projeto.)
     def vertex_shader(self, shader):
