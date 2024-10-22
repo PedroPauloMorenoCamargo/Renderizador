@@ -762,7 +762,7 @@ class GL:
 
 
     @staticmethod
-    def box(size, colors,texture = None):
+    def box(size, colors):
         """Função usada para renderizar Boxes."""
         # A função box é usada para desenhar paralelepípedos na cena. O Box é centrada no
         # (0, 0, 0) no sistema de coordenadas local e alinhado com os eixos de coordenadas
@@ -810,7 +810,6 @@ class GL:
             #Face6
             4,7,6,5,-1
         ]
-        print(colors)
         GL.indexedFaceSet(points, coordIndex, False, None, None, None, None, colors, None)
 
     def generate_mipmaps(texture):
@@ -906,7 +905,7 @@ class GL:
 
     
     @staticmethod
-    def sphere(radius, colors, subdivisions=1):
+    def sphere(radius, colors, subdivisions=4):
         # Generate initial icosahedron
         t = (1.0 + np.sqrt(5.0)) / 2.0
 
