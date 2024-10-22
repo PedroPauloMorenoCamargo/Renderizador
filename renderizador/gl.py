@@ -770,7 +770,7 @@ class GL:
         # e Z, respectivamente, e cada valor do tamanho deve ser maior que zero. Para desenha
         # essa caixa você vai provavelmente querer tesselar ela em triângulos, para isso
         # encontre os vértices e defina os triângulos.
-
+    
         #Pega os pontos
         coordinate_x = size[0]/2
         coordinate_y = size[1]/2
@@ -905,7 +905,7 @@ class GL:
 
     
     @staticmethod
-    def sphere(radius, colors, subdivisions=4):
+    def sphere(radius, colors, subdivisions=5):
         # Generate initial icosahedron
         t = (1.0 + np.sqrt(5.0)) / 2.0
 
